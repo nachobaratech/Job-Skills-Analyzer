@@ -33,5 +33,5 @@ variable "lambda_timeout" {
 variable "lambda_memory" {
   description = "Lambda function memory in MB"
   type        = number
-  default     = 256
+  default     = 512
 }
