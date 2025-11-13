@@ -33,3 +33,10 @@ test-event.json
 # Temporary files
 *.log
 *.tmp
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform/lambda_function.zip
