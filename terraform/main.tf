@@ -71,17 +71,17 @@ resource "aws_s3_bucket_public_access_block" "athena_results" {
 # ATHENA DATABASE & TABLE
 # ============================================================================
 
-resource "aws_athena_database" "job_skills_db" {
-  name   = "job_skills_db"
-  bucket = aws_s3_bucket.athena_results.id
-
-  force_destroy = true
-}
+# Athena database exists - managed manually
+# resource "aws_athena_database" "job_skills_db" {
+#   name   = "job_skills_db"
+#   bucket = aws_s3_bucket.athena_results.id
+# 
+# }
 
 # Note: Athena tables with complex structures are better created via SQL
 # We'll create a null_resource to run the CREATE TABLE statement
 resource "null_resource" "athena_table" {
-  depends_on = [aws_athena_database.job_skills_db]
+  # depends_on = [aws_athena_database.job_skills_db] # Database managed manually
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -98,104 +98,104 @@ resource "null_resource" "athena_table" {
 # ============================================================================
 
 # Lambda execution role
-resource "aws_iam_role" "lambda_role" {
-  name = "JobSkillsLambdaRole"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = {
-    Name    = "Job Skills Lambda Role"
-    Project = var.project_name
-  }
-}
+# resource "aws_iam_role" "lambda_role" {
+#   name = "JobSkillsLambdaRole"
+# 
+#   assume_role_policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [{
+#       Action = "sts:AssumeRole"
+#       Effect = "Allow"
+#       Principal = {
+#         Service = "lambda.amazonaws.com"
+#       }
+#     }]
+#   })
+# 
+#   tags = {
+#     Name    = "Job Skills Lambda Role"
+#     Project = var.project_name
+#   }
+# }
 
 # Lambda policy for CloudWatch Logs
-resource "aws_iam_role_policy_attachment" "lambda_logs" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
+# resource "aws_iam_role_policy_attachment" "lambda_logs" {
+#   role       = aws_iam_role.lambda_role.name
+#   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+# }
 
 # Lambda policy for S3 access
-resource "aws_iam_role_policy" "lambda_s3" {
-  name = "JobSkillsLambdaS3Policy"
-  role = aws_iam_role.lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          aws_s3_bucket.raw.arn,
-          "${aws_s3_bucket.raw.arn}/*"
-        ]
-      }
-    ]
-  })
-}
+# resource "aws_iam_role_policy" "lambda_s3" {
+#   name = "JobSkillsLambdaS3Policy"
+#   role = aws_iam_role.lambda_role.id
+# 
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "s3:GetObject",
+#           "s3:ListBucket"
+#         ]
+#         Resource = [
+#           aws_s3_bucket.raw.arn,
+#           "${aws_s3_bucket.raw.arn}/*"
+#         ]
+#       }
+#     ]
+#   })
+# }
 
 # Lambda policy for Athena access
-resource "aws_iam_role_policy" "lambda_athena" {
-  name = "JobSkillsLambdaAthenaPolicy"
-  role = aws_iam_role.lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "athena:StartQueryExecution",
-          "athena:GetQueryExecution",
-          "athena:GetQueryResults",
-          "glue:GetTable",
-          "glue:GetPartitions"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:GetObject"
-        ]
-        Resource = "${aws_s3_bucket.athena_results.arn}/*"
-      }
-    ]
-  })
-}
+# resource "aws_iam_role_policy" "lambda_athena" {
+#   name = "JobSkillsLambdaAthenaPolicy"
+#   role = aws_iam_role.lambda_role.id
+# 
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "athena:StartQueryExecution",
+#           "athena:GetQueryExecution",
+#           "athena:GetQueryResults",
+#           "glue:GetTable",
+#           "glue:GetPartitions"
+#         ]
+#         Resource = "*"
+#       },
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "s3:PutObject",
+#           "s3:GetObject"
+#         ]
+#         Resource = "${aws_s3_bucket.athena_results.arn}/*"
+#       }
+#     ]
+#   })
+# }
 
 # Lambda policy for SNS access
-resource "aws_iam_role_policy" "lambda_sns" {
-  name = "JobSkillsLambdaSNSPolicy"
-  role = aws_iam_role.lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "sns:Publish"
-        ]
-        Resource = aws_sns_topic.alerts.arn
-      }
-    ]
-  })
-}
+# resource "aws_iam_role_policy" "lambda_sns" {
+#   name = "JobSkillsLambdaSNSPolicy"
+#   role = aws_iam_role.lambda_role.id
+# 
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "sns:Publish"
+#         ]
+#         Resource = aws_sns_topic.alerts.arn
+#       }
+#     ]
+#   })
+# }
 
 # ============================================================================
 # LAMBDA FUNCTION
@@ -211,7 +211,7 @@ data "archive_file" "lambda_zip" {
 resource "aws_lambda_function" "etl_trigger" {
   filename         = data.archive_file.lambda_zip.output_path
   function_name    = "JobSkillsETLTrigger"
-  role            = aws_iam_role.lambda_role.arn
+  role            = "arn:aws:iam::223280412524:role/LabRole"
   handler         = "etl_trigger.lambda_handler"
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
   runtime         = "python3.12"
@@ -221,7 +221,7 @@ resource "aws_lambda_function" "etl_trigger" {
   environment {
     variables = {
       SNS_TOPIC_ARN = aws_sns_topic.alerts.arn
-      ATHENA_DATABASE = aws_athena_database.job_skills_db.name
+      ATHENA_DATABASE = "job_skills_db"  # Database managed manually
       ATHENA_OUTPUT_LOCATION = "s3://${aws_s3_bucket.athena_results.bucket}/"
     }
   }

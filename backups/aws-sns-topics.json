@@ -1,0 +1,10 @@
+{
+    "Topics": [
+        {
+            "TopicArn": "arn:aws:sns:us-east-1:223280412524:RedshiftSNS"
+        },
+        {
+            "TopicArn": "arn:aws:sns:us-east-1:223280412524:job-skills-alerts"
+        }
+    ]
+}

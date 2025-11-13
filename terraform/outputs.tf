@@ -17,7 +17,7 @@ output "s3_athena_results_bucket" {
 
 output "athena_database" {
   description = "Name of the Athena database"
-  value       = aws_athena_database.job_skills_db.name
+  value       = "job_skills_db"  # Database managed manually
 }
 
 output "lambda_function_name" {
