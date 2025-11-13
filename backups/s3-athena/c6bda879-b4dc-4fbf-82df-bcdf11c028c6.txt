@@ -1,3 +1,0 @@
-jobs_raw
-jobs_with_skills
-top_skills
