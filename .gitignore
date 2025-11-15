@@ -40,3 +40,37 @@ test-event.json
 .terraform/
 .terraform.lock.hcl
 terraform/lambda_function.zip
+# Sensitive files - DO NOT COMMIT
+.env
+*.tfvars
+terraform.tfstate
+terraform.tfstate.backup
+*.zip
+*.pem
+*.key
+
+# AWS credentials
+.aws/
+
+# Python
+__pycache__/
+*.pyc
+package/
+venv/
+# Sensitive files
+.env
+*.tfstate*
+*.backup*
+*.zip
+*.pem
+*.key
+.aws/
+
+# Python
+__pycache__/
+*.pyc
+package/
+venv/
+
+# macOS
+.DS_Store

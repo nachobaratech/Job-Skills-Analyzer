@@ -118,3 +118,38 @@ async def get_skill_details(request: Request, skill_name: str, api_key: str = De
         "job_count": int(row["job_count"]),
         "percentage": float(row["percentage"])
     }
+
+# Mount the same app under /auth prefix for JWT-authenticated access
+# This allows /stats AND /auth/stats to work
+from fastapi import APIRouter
+
+# Create a sub-application for /auth routes
+auth_router = APIRouter(prefix="/auth", dependencies=[])
+
+# Re-register all endpoints under /auth
+@auth_router.get("/stats", response_model=StatsResponse)
+async def get_stats_jwt(request: Request):
+    stats_df = athena.get_job_stats()
+    skills_df = athena.get_top_skills(limit=100)
+    
+    return StatsResponse(
+        total_jobs=int(stats_df["total_jobs"].iloc[0]),
+        jobs_with_skills=int(stats_df["jobs_with_skills"].iloc[0]),
+        avg_skills_per_job=float(stats_df["avg_skills"].iloc[0]),
+        unique_skills=len(skills_df)
+    )
+
+@auth_router.get("/skills/top", response_model=List[SkillInfo])
+async def get_top_skills_jwt(request: Request, limit: int = 10):
+    df = athena.get_top_skills(limit=limit)
+    return [
+        SkillInfo(
+            skill=row["skill"],
+            job_count=int(row["job_count"]),
+            percentage=float(row["percentage"])
+        )
+        for _, row in df.iterrows()
+    ]
+
+# Include the auth router
+app.include_router(auth_router)

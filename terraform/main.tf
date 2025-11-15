@@ -372,3 +372,19 @@ resource "aws_cloudwatch_event_rule" "daily_check" {
 # Note: Target would be added here if we had a function to trigger
 # For now, the rule exists but isn't connected to anything
 
+
+# EventBridge target - trigger ETL Lambda daily
+resource "aws_cloudwatch_event_target" "trigger_etl_daily" {
+  rule      = aws_cloudwatch_event_rule.daily_check.name
+  target_id = "TriggerETLLambda"
+  arn       = aws_lambda_function.etl_trigger.arn
+}
+
+# Allow EventBridge to invoke Lambda
+resource "aws_lambda_permission" "allow_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.etl_trigger.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.daily_check.arn
+}

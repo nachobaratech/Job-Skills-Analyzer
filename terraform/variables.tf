@@ -35,3 +35,16 @@ variable "lambda_memory" {
   type        = number
   default     = 512
 }
+
+variable "api_key" {
+  description = "API key for authentication"
+  type        = string
+  default     = "job-skills-analyzer-secret-key-2024"
+  sensitive   = true
+}
+
+variable "environment" {
+  description = "Environment name (dev/staging/prod)"
+  type        = string
+  default     = "dev"
+}
