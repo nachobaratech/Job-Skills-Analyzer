@@ -2,13 +2,29 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
 *.so
 .Python
 env/
 venv/
+package/
 
-# Environment variables
+# Sensitive files
 .env
+*.tfvars
+*.pem
+*.key
+.aws/
+
+# Terraform
+*.tfstate*
+*.backup*
+*.bak*
+.terraform/
+.terraform.lock.hcl
+
+# Large files
+*.zip
 
 # IDE
 .vscode/
@@ -23,54 +39,11 @@ Thumbs.db
 # Streamlit
 .streamlit/
 
-# AWS
+# Temporary files
+*.log
+*.tmp
 response.json
 test-event.json
 
 # Data (optional - you can include or exclude)
 # skills-data/*.jsonl
-
-# Temporary files
-*.log
-*.tmp
-
-# Terraform
-*.tfstate
-*.tfstate.*
-.terraform/
-.terraform.lock.hcl
-terraform/lambda_function.zip
-# Sensitive files - DO NOT COMMIT
-.env
-*.tfvars
-terraform.tfstate
-terraform.tfstate.backup
-*.zip
-*.pem
-*.key
-
-# AWS credentials
-.aws/
-
-# Python
-__pycache__/
-*.pyc
-package/
-venv/
-# Sensitive files
-.env
-*.tfstate*
-*.backup*
-*.zip
-*.pem
-*.key
-.aws/
-
-# Python
-__pycache__/
-*.pyc
-package/
-venv/
-
-# macOS
-.DS_Store
