@@ -17,16 +17,6 @@ resource "aws_s3_bucket" "raw" {
   }
 }
 
-# Curated data bucket
-resource "aws_s3_bucket" "curated" {
-  bucket = "job-skills-curated-${var.account_id}"
-
-  tags = {
-    Name        = "Job Skills Curated Data"
-    Project     = var.project_name
-    Environment = "production"
-  }
-}
 
 # Athena results bucket
 resource "aws_s3_bucket" "athena_results" {
@@ -42,15 +32,6 @@ resource "aws_s3_bucket" "athena_results" {
 # Block public access for all buckets
 resource "aws_s3_bucket_public_access_block" "raw" {
   bucket = aws_s3_bucket.raw.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_public_access_block" "curated" {
-  bucket = aws_s3_bucket.curated.id
 
   block_public_acls       = true
   block_public_policy     = true

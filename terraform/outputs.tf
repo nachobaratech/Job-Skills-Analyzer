@@ -5,11 +5,6 @@ output "s3_raw_bucket" {
   value       = aws_s3_bucket.raw.id
 }
 
-output "s3_curated_bucket" {
-  description = "Name of the curated data S3 bucket"
-  value       = aws_s3_bucket.curated.id
-}
-
 output "s3_athena_results_bucket" {
   description = "Name of the Athena results S3 bucket"
   value       = aws_s3_bucket.athena_results.id
