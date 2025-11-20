@@ -15,7 +15,7 @@ variable "project_name" {
 variable "account_id" {
   description = "AWS Account ID"
   type        = string
-  default     = "223280412524"
+  default     = "624943535027"
 }
 
 variable "email_address" {

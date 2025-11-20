@@ -35,7 +35,7 @@ def lambda_handler(event, context):
             QueryString=query,
             QueryExecutionContext={'Database': 'job_skills_db'},
             ResultConfiguration={
-                'OutputLocation': 's3://job-skills-athena-results-223280412524/'
+                'OutputLocation': 's3://job-skills-athena-results-624943535027/'
             }
         )
         
@@ -44,7 +44,7 @@ def lambda_handler(event, context):
         
         # Send SUCCESS notification via SNS
         sns.publish(
-            TopicArn='arn:aws:sns:us-east-1:223280412524:job-skills-alerts',
+            TopicArn='arn:aws:sns:us-east-1:624943535027:job-skills-alerts',
             Subject='✅ Job Skills Analyzer - Data Updated',
             Message=f"""
 Job Market Skills Analyzer - ETL Pipeline Success
@@ -92,7 +92,7 @@ All systems operational.
         
         # Send ERROR notification via SNS
         sns.publish(
-            TopicArn='arn:aws:sns:us-east-1:223280412524:job-skills-alerts',
+            TopicArn='arn:aws:sns:us-east-1:624943535027:job-skills-alerts',
             Subject='❌ Job Skills Analyzer - ERROR',
             Message=f"""
 Job Market Skills Analyzer - ETL Pipeline Error

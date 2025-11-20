@@ -192,7 +192,7 @@ data "archive_file" "lambda_zip" {
 resource "aws_lambda_function" "etl_trigger" {
   filename         = data.archive_file.lambda_zip.output_path
   function_name    = "JobSkillsETLTrigger"
-  role            = "arn:aws:iam::223280412524:role/LabRole"
+  role            = "arn:aws:iam::624943535027:role/LabRole"
   handler         = "etl_trigger.lambda_handler"
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
   runtime         = "python3.12"

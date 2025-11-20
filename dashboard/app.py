@@ -2,38 +2,348 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from athena_helper import AthenaHelper
 import numpy as np
+from collections import defaultdict
+from itertools import combinations
+import boto3
+from botocore.exceptions import ClientError
+import json
 
-st.set_page_config(page_title="Job Skills Analyzer Pro", page_icon="📊", layout="wide")
+st.set_page_config(
+    page_title="Job Skills Intelligence Platform", 
+    page_icon="💼", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Custom CSS for better styling
+# ============================================================================
+# AUTHENTICATION SYSTEM
+# ============================================================================
+
+class CognitoAuth:
+    """AWS Cognito Authentication Handler"""
+    
+    def __init__(self):
+        self.user_pool_id = "us-east-1_dl3mvEfzR"
+        self.client_id = "1i80rbk9u5rkf34m6n60ocs7vj"
+        self.region = "us-east-1"
+        
+        try:
+            self.client = boto3.client('cognito-idp', region_name=self.region)
+        except Exception as e:
+            self.client = None
+    
+    def authenticate(self, username, password):
+        """Authenticate user with Cognito"""
+        if not self.client:
+            return None, "Cognito client not initialized"
+        
+        try:
+            response = self.client.initiate_auth(
+                ClientId=self.client_id,
+                AuthFlow='USER_PASSWORD_AUTH',
+                AuthParameters={
+                    'USERNAME': username,
+                    'PASSWORD': password
+                }
+            )
+            
+            if 'AuthenticationResult' in response:
+                return response['AuthenticationResult'], None
+            else:
+                return None, "Authentication failed"
+                
+        except ClientError as e:
+            return None, str(e)
+        except Exception as e:
+            return None, f"Unexpected error: {str(e)}"
+
+if 'cognito_auth' not in st.session_state:
+    st.session_state.cognito_auth = CognitoAuth()
+
+def check_authentication():
+    """Check if user is authenticated"""
+    return st.session_state.get('authenticated', False)
+
+def login_page():
+    """Display professional login page"""
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div style='text-align: center; padding: 40px;'>
+            <h1 style='color: #1e3a8a; font-size: 2.5em; margin-bottom: 10px; font-weight: 600;'>Job Skills Intelligence Platform</h1>
+            <p style='color: #64748b; font-size: 1.1em; font-weight: 400;'>Real-time Job Market Analytics & Insights</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        with st.container():
+            st.markdown("### Secure Login")
+            
+            username = st.text_input(
+                "Email Address", 
+                placeholder="your.email@example.com",
+                key="login_username"
+            )
+            password = st.text_input(
+                "Password", 
+                type="password",
+                placeholder="Enter your password",
+                key="login_password"
+            )
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            col_a, col_b = st.columns(2)
+            
+            with col_a:
+                if st.button("Sign In", use_container_width=True, type="primary"):
+                    if username and password:
+                        with st.spinner("Authenticating..."):
+                            auth_result, error = st.session_state.cognito_auth.authenticate(username, password)
+                    
+                            if auth_result:
+                                st.session_state.authenticated = True
+                                st.session_state.username = username
+                                st.session_state.id_token = auth_result.get('IdToken')
+                                st.session_state.access_token = auth_result.get('AccessToken')
+                                st.success("Welcome back!")
+                                st.rerun()
+                            else:
+                                st.error(f"Authentication failed: {error}")
+                    else:
+                        st.warning("Please enter both email and password")
+            
+            with col_b:
+                if st.button("Demo Access", use_container_width=True):
+                    st.session_state.authenticated = True
+                    st.session_state.username = "demo_user"
+                    st.session_state.demo_mode = True
+                    st.rerun()
+
+# ============================================================================
+# PROFESSIONAL CSS STYLING
+# ============================================================================
+
 st.markdown("""
 <style>
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 20px;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
+    /* Main styling */
+    .main {
+        background-color: #f8fafc;
     }
-    .insight-box {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        padding: 20px;
-        border-radius: 10px;
-        color: white;
-        font-weight: bold;
-        margin: 20px 0;
+    
+    /* Headers - formal, no emojis */
+    h1, h2, h3 {
+        color: #1e293b;
+        font-weight: 600;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
+    
+    /* Sidebar - professional look */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+        border-right: 1px solid #e2e8f0;
+    }
+    
+    [data-testid="stSidebar"] .css-1d391kg {
+        padding-top: 2rem;
+    }
+    
+    /* Remove radio button styling - make it clean list */
+    .stRadio > div {
+        background-color: transparent;
+        border: none;
+    }
+    
+    .stRadio > div > label {
+        background-color: white;
+        padding: 12px 16px;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: block;
+        font-weight: 500;
+        color: #475569;
+    }
+    
+    .stRadio > div > label:hover {
+        border-color: #3b82f6;
+        background-color: #f8fafc;
+    }
+    
+    .stRadio > div > label[data-checked="true"] {
+        background-color: #3b82f6;
+        border-color: #3b82f6;
+        color: white;
+        font-weight: 600;
+    }
+    
+    /* Metric cards */
+    [data-testid="stMetricValue"] {
+        font-size: 2.5em;
+        color: #1e40af;
+        font-weight: 600;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: #64748b;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    
+    /* Buttons */
+    .stButton>button {
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.2s;
+        border: none;
+        font-family: 'Inter', sans-serif;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    /* Tabs - formal rectangular style */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
+        gap: 2px;
+        background-color: #f1f5f9;
+        padding: 4px;
+        border-radius: 8px;
     }
+    
     .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        padding: 10px 20px;
+        height: 44px;
+        padding: 0 24px;
+        background-color: transparent;
+        border-radius: 6px;
+        border: none;
+        color: #64748b;
+        font-weight: 500;
+        font-size: 0.95rem;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: #e2e8f0;
+        color: #1e293b;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: white;
+        color: #1e40af;
+        font-weight: 600;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        background-color: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-weight: 500;
+        color: #1e293b;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        border-color: #3b82f6;
+        background-color: #f8fafc;
+    }
+    
+    /* Data tables */
+    .dataframe {
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 8px;
+    }
+    
+    /* Remove extra padding */
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+    }
+    
+    /* Professional card styling */
+    .professional-card {
+        background: white;
+        padding: 24px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        margin-bottom: 16px;
+    }
+    
+    /* Section headers */
+    .section-header {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 0.5rem;
+        border-bottom: 2px solid #3b82f6;
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Insight boxes */
+    .insight-box {
+        background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+        padding: 20px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        margin: 16px 0;
+    }
+    
+    /* Skill category boxes */
+    .skill-category {
+        background: white;
+        border-left: 4px solid;
+        padding: 16px;
+        border-radius: 6px;
+        margin: 12px 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    
+    .skill-category.high-demand {
+        border-left-color: #dc2626;
+        background: linear-gradient(90deg, #fef2f2 0%, white 100%);
+    }
+    
+    .skill-category.moderate-demand {
+        border-left-color: #f59e0b;
+        background: linear-gradient(90deg, #fffbeb 0%, white 100%);
+    }
+    
+    .skill-category.low-demand {
+        border-left-color: #3b82f6;
+        background: linear-gradient(90deg, #eff6ff 0%, white 100%);
+    }
+    
+    /* Progress bars */
+    .stProgress > div > div > div > div {
+        background: linear-gradient(90deg, #3b82f6 0%, #10b981 100%);
+        border-radius: 4px;
+    }
+    
+    /* Divider */
+    hr {
+        margin: 2rem 0;
+        border: none;
+        border-top: 1px solid #e2e8f0;
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ============================================================================
+# DATA LOADING
+# ============================================================================
 
 @st.cache_resource
 def get_athena():
@@ -41,7 +351,7 @@ def get_athena():
 
 @st.cache_data(ttl=300)
 def load_all_data():
-    """Load and cache all data"""
+    """Load and cache all data from Athena"""
     athena = get_athena()
     stats_df = athena.get_job_stats()
     skills_df = athena.get_top_skills(limit=100)
@@ -49,753 +359,1453 @@ def load_all_data():
     skills_df["percentage"] = skills_df["percentage"].astype(float)
     return stats_df, skills_df
 
-# Skill categories with job role mapping
-SKILL_CATEGORIES = {
-    "Soft Skills": ["Communication", "Leadership", "Teamwork", "Problem Solving", "Sales", "Customer Service", "Negotiation"],
-    "Business Tools": ["Excel", "PowerPoint", "Project Management", "CRM", "Salesforce", "SAP", "Power BI", "Tableau"],
-    "Programming": ["Python", "JavaScript", "Java", "TypeScript", "C++", "C#", "Go", "Ruby", "PHP", "Swift", "Kotlin", "Rust"],
-    "Web Development": ["React", "Angular", "Vue.js", "Node.js", "Django", "Flask", "Express"],
-    "Databases": ["SQL", "PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch", "Oracle"],
-    "Cloud & DevOps": ["AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform", "Jenkins", "Git", "CI/CD"],
-    "Data & Analytics": ["Data Analysis", "Business Analysis", "Financial Analysis", "Big Data", "ETL", "Spark", "Kafka"],
-    "AI & ML": ["Machine Learning", "Deep Learning", "TensorFlow", "PyTorch"],
-    "Marketing": ["Social Media", "SEO", "Content Marketing", "Google Analytics", "Digital Marketing"],
-    "Design": ["UI/UX", "Figma", "Photoshop", "Adobe Illustrator", "Sketch"],
-    "Quality & Process": ["Quality Assurance", "Agile", "Scrum", "Test Automation", "Selenium"],
-    "APIs & Integration": ["REST API", "GraphQL", "Microservices"]
-}
+@st.cache_data(ttl=300)
+def get_all_jobs_with_skills():
+    """Get all jobs with their skills from Athena"""
+    athena = get_athena()
+    
+    query = """
+    SELECT id, title, company, skills, skill_count
+    FROM jobs_with_skills
+    WHERE skill_count > 0
+    """
+    
+    return athena.run_query(query)
 
-# Job role to skill mapping (approximate)
-JOB_ROLES = {
-    "Software Engineer": ["Python", "JavaScript", "SQL", "Git", "REST API", "Docker", "AWS", "React", "Agile"],
-    "Data Analyst": ["Excel", "SQL", "Python", "Tableau", "Power BI", "Data Analysis", "Communication"],
-    "Product Manager": ["Communication", "Leadership", "Agile", "Jira", "Excel", "Project Management", "Problem Solving"],
-    "Marketing Manager": ["Communication", "Social Media", "SEO", "Google Analytics", "Content Marketing", "Excel", "Leadership"],
-    "Sales Representative": ["Communication", "Sales", "CRM", "Salesforce", "Customer Service", "Negotiation", "Excel"],
-    "DevOps Engineer": ["AWS", "Docker", "Kubernetes", "CI/CD", "Terraform", "Git", "Python", "Jenkins"],
-    "UX/UI Designer": ["UI/UX", "Figma", "Photoshop", "Communication", "Problem Solving", "Adobe Illustrator"],
-    "Business Analyst": ["Excel", "SQL", "Business Analysis", "Communication", "Power BI", "Project Management"],
-    "Full Stack Developer": ["JavaScript", "React", "Node.js", "SQL", "Python", "Git", "REST API", "AWS"],
-    "Data Scientist": ["Python", "Machine Learning", "SQL", "TensorFlow", "Data Analysis", "Big Data", "Communication"],
-    "Project Manager": ["Project Management", "Communication", "Leadership", "Agile", "Excel", "PowerPoint", "Problem Solving"],
-    "Customer Success Manager": ["Communication", "Customer Service", "CRM", "Problem Solving", "Sales", "Excel"]
-}
+@st.cache_data(ttl=300)
+def parse_skills_from_string(skills_str):
+    """Parse skills array from string format"""
+    if not skills_str or skills_str == '[]':
+        return []
+    
+    skills_str = skills_str.strip('[]').replace("'", "").replace('"', '')
+    skills = [s.strip() for s in skills_str.split(',') if s.strip()]
+    
+    return skills
 
-# Header
-st.title("🚀 Job Market Skills Intelligence Platform")
-st.markdown("### Real-time Analytics Powered by AWS | 1,000+ LinkedIn Jobs Analyzed")
-st.divider()
-
-# Sidebar
-with st.sidebar:
-    st.image("https://via.placeholder.com/250x80/667eea/ffffff?text=Skills+Analyzer", use_column_width=True)
+@st.cache_data(ttl=300)
+def calculate_skill_cooccurrence(min_support=5):
+    """Calculate real skill co-occurrence from Athena data"""
+    jobs_df = get_all_jobs_with_skills()
     
-    st.header("🎛️ Dashboard Controls")
+    cooccurrence = defaultdict(int)
+    skill_frequencies = defaultdict(int)
     
-    # View mode
-    view_mode = st.radio(
-        "Analysis Mode",
-        ["📊 Market Overview", "🎯 Career Advisor", "🔬 Deep Dive", "📈 Trends & Patterns"],
-        help="Choose your analysis perspective"
-    )
-    
-    st.divider()
-    
-    # Filters
-    st.subheader("🔧 Filters")
-    
-    selected_categories = st.multiselect(
-        "Skill Categories",
-        options=list(SKILL_CATEGORIES.keys()),
-        default=list(SKILL_CATEGORIES.keys())
-    )
-    
-    min_percentage = st.slider("Min. Job Percentage", 0, 50, 0, 
-                               help="Show skills in at least X% of jobs")
-    
-    show_count = st.slider("Number of Skills", 5, 50, 20)
-    
-    st.divider()
-    
-    # Data info
-    st.subheader("ℹ️ Data Info")
-    st.caption("🗄️ Source: AWS Athena")
-    st.caption("📊 Jobs: 1,000 real postings")
-    st.caption("🔄 Updated: Real-time")
-    
-    if st.button("♻️ Refresh All Data", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-
-# Load data
-with st.spinner("🔄 Loading data from AWS Athena..."):
-    stats_df, all_skills_df = load_all_data()
-    
-    total_jobs = int(stats_df["total_jobs"].iloc[0])
-    jobs_with_skills = int(stats_df["jobs_with_skills"].iloc[0])
-    avg_skills = float(stats_df["avg_skills"].iloc[0])
-
-# Filter skills based on selection
-if selected_categories:
-    selected_skills = []
-    for category in selected_categories:
-        selected_skills.extend(SKILL_CATEGORIES[category])
-    filtered_skills_df = all_skills_df[all_skills_df["skill"].isin(selected_skills)]
-else:
-    filtered_skills_df = all_skills_df.copy()
-
-filtered_skills_df = filtered_skills_df[filtered_skills_df["percentage"] >= min_percentage]
-display_skills_df = filtered_skills_df.head(show_count)
-
-# =============================================================================
-# VIEW MODE: MARKET OVERVIEW
-# =============================================================================
-if view_mode == "📊 Market Overview":
-    
-    # Key Metrics Row
-    st.subheader("📈 Key Performance Indicators")
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        st.metric("📊 Total Jobs", f"{total_jobs:,}", help="LinkedIn jobs analyzed")
-    
-    with col2:
-        detection_rate = (jobs_with_skills/total_jobs*100)
-        st.metric("✅ Detection Rate", f"{detection_rate:.1f}%", 
-                 f"{jobs_with_skills:,} jobs", help="Jobs with identified skills")
-    
-    with col3:
-        if not display_skills_df.empty:
-            st.metric("🏆 #1 Skill", display_skills_df.iloc[0]["skill"], 
-                     f"{display_skills_df.iloc[0]['percentage']:.1f}%")
-    
-    with col4:
-        st.metric("📚 Avg Skills/Job", f"{avg_skills:.1f}", 
-                 "Multi-skilled", help="Average skills per posting")
-    
-    with col5:
-        st.metric("🎯 Unique Skills", len(all_skills_df), 
-                 "Tracked", help="Total distinct skills found")
-    
-    st.divider()
-    
-    # Major Insight
-    soft_skills = ["Communication", "Leadership", "Teamwork", "Sales", "Customer Service"]
-    tech_skills = ["Python", "JavaScript", "SQL", "AWS", "Docker"]
-    
-    soft_data = all_skills_df[all_skills_df["skill"].isin(soft_skills)]
-    tech_data = all_skills_df[all_skills_df["skill"].isin(tech_skills)]
-    
-    if not soft_data.empty and not tech_data.empty:
-        soft_avg = soft_data["percentage"].mean()
-        tech_avg = tech_data["percentage"].mean()
-        difference = soft_avg - tech_avg
+    for _, row in jobs_df.iterrows():
+        skills = parse_skills_from_string(row['skills'])
         
-        st.markdown(f"""
-        <div class="insight-box">
-        💡 <b>MAJOR INSIGHT</b>: Soft skills average <b>{soft_avg:.1f}%</b> demand vs Technical skills <b>{tech_avg:.1f}%</b> 
-        ({'+' if difference > 0 else ''}{difference:.1f}% difference)
-        <br><br>
-        🎯 <b>Recommendation</b>: Job seekers should prioritize communication and interpersonal skills alongside technical expertise!
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Main visualization
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.subheader(f"📊 Top {len(display_skills_df)} Most Demanded Skills")
+        for skill in skills:
+            skill_frequencies[skill] += 1
         
-        if not display_skills_df.empty:
-            # Color code by category
-            colors = []
-            for skill in display_skills_df["skill"]:
-                if skill in soft_skills:
-                    colors.append('#FF6B6B')  # Red for soft
-                elif skill in tech_skills:
-                    colors.append('#4ECDC4')  # Teal for tech
-                else:
-                    colors.append('#95E1D3')  # Green for others
-            
-            fig = go.Figure(go.Bar(
-                x=display_skills_df["percentage"],
-                y=display_skills_df["skill"],
-                orientation='h',
-                marker=dict(
-                    color=colors,
-                    line=dict(color='white', width=1)
-                ),
-                text=display_skills_df["percentage"].apply(lambda x: f"{x:.1f}%"),
-                textposition='outside',
-                hovertemplate='<b>%{y}</b><br>Demand: %{x:.1f}%<br>Jobs: %{customdata}<extra></extra>',
-                customdata=display_skills_df["job_count"]
-            ))
-            
-            fig.update_layout(
-                height=max(500, len(display_skills_df) * 30),
-                xaxis_title="Percentage of Jobs",
-                yaxis_title="",
-                showlegend=False,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Legend
-            st.caption("🔴 Soft Skills | 🟢 Technical Skills | 🟡 Other Skills")
+        if len(skills) >= 2:
+            for skill1, skill2 in combinations(sorted(skills), 2):
+                pair_key = f"{skill1}|||{skill2}"
+                cooccurrence[pair_key] += 1
     
-    with col2:
-        st.subheader("🎨 Category Distribution")
-        
-        # Calculate category totals
-        category_totals = {}
-        for category, skills_list in SKILL_CATEGORIES.items():
-            cat_skills = all_skills_df[all_skills_df["skill"].isin(skills_list)]
-            if not cat_skills.empty:
-                category_totals[category] = int(cat_skills["job_count"].sum())
-        
-        cat_df = pd.DataFrame(list(category_totals.items()), columns=["Category", "Total Mentions"])
-        cat_df = cat_df.sort_values("Total Mentions", ascending=False)
-        
-        fig_pie = px.pie(
-            cat_df,
-            values="Total Mentions",
-            names="Category",
-            hole=0.5,
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
-        fig_pie.update_traces(textposition='outside', textinfo='percent+label')
-        fig_pie.update_layout(height=400)
-        st.plotly_chart(fig_pie, use_container_width=True)
-    
-    # Detailed comparison
-    st.divider()
-    st.subheader("📊 Category Performance Comparison")
-    
-    category_stats = []
-    for category, skills_list in SKILL_CATEGORIES.items():
-        cat_skills = all_skills_df[all_skills_df["skill"].isin(skills_list)]
-        if not cat_skills.empty:
-            category_stats.append({
-                "Category": category,
-                "Avg Demand": float(cat_skills["percentage"].mean()),
-                "Top Skill": cat_skills.iloc[0]["skill"],
-                "# Skills Found": len(cat_skills),
-                "Total Mentions": int(cat_skills["job_count"].sum())
+    results = []
+    for pair, count in cooccurrence.items():
+        if count >= min_support:
+            skill1, skill2 = pair.split('|||')
+            results.append({
+                'skill1': skill1,
+                'skill2': skill2,
+                'count': count,
+                'skill1_freq': skill_frequencies[skill1],
+                'skill2_freq': skill_frequencies[skill2]
             })
     
-    cat_stats_df = pd.DataFrame(category_stats).sort_values("Avg Demand", ascending=False)
+    df = pd.DataFrame(results)
+    if not df.empty:
+        df = df.sort_values('count', ascending=False)
     
-    fig_cat = px.bar(
-        cat_stats_df,
-        x="Avg Demand",
-        y="Category",
-        orientation='h',
-        text="Avg Demand",
-        color="Avg Demand",
-        color_continuous_scale="Viridis",
-        title="Average Skill Demand by Category"
-    )
-    fig_cat.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-    fig_cat.update_layout(height=400)
-    st.plotly_chart(fig_cat, use_container_width=True)
-    
-    st.dataframe(cat_stats_df, use_container_width=True, hide_index=True)
+    return df
 
-# =============================================================================
-# VIEW MODE: CAREER ADVISOR
-# =============================================================================
-elif view_mode == "🎯 Career Advisor":
+@st.cache_data(ttl=300)
+def get_skills_for_job_title(job_keyword):
+    """Get skills required for jobs matching the keyword"""
+    athena = get_athena()
     
-    st.header("🎯 Personalized Career Skills Advisor")
-    st.markdown("**Select your target job role to discover the most important skills employers want**")
+    query = f"""
+    SELECT skills, skill_count
+    FROM jobs_with_skills
+    WHERE LOWER(title) LIKE '%{job_keyword.lower()}%'
+    AND skill_count > 0
+    """
     
-    col1, col2 = st.columns([1, 1])
+    jobs_df = athena.run_query(query)
     
-    with col1:
-        selected_role = st.selectbox(
-            "🎓 What job role are you targeting?",
-            options=list(JOB_ROLES.keys()),
-            help="Select your desired career path"
-        )
+    if jobs_df.empty:
+        return None
     
-    with col2:
-        experience_level = st.select_slider(
-            "💼 Your Experience Level",
-            options=["Entry Level", "Mid Level", "Senior Level", "Expert"],
-            value="Mid Level"
-        )
+    skill_counts = defaultdict(int)
+    total_jobs = len(jobs_df)
     
-    st.divider()
+    for _, row in jobs_df.iterrows():
+        skills = parse_skills_from_string(row['skills'])
+        for skill in skills:
+            skill_counts[skill] += 1
     
-    # Get required skills for selected role
-    required_skills = JOB_ROLES[selected_role]
-    role_skills_data = all_skills_df[all_skills_df["skill"].isin(required_skills)].copy()
+    result = pd.DataFrame([
+        {'skill': skill, 'job_count': count, 'percentage': (count / total_jobs) * 100}
+        for skill, count in skill_counts.items()
+    ])
     
-    if not role_skills_data.empty:
-        # Sort by demand
-        role_skills_data = role_skills_data.sort_values("percentage", ascending=False)
-        
-        # Calculate readiness score
-        total_demand = role_skills_data["percentage"].sum()
-        avg_demand = role_skills_data["percentage"].mean()
-        
-        st.success(f"✅ Found {len(role_skills_data)} relevant skills for **{selected_role}** role")
-        
-        # Metrics row
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("🎯 Required Skills", len(role_skills_data), 
-                     f"of {len(required_skills)} total")
-        
-        with col2:
-            st.metric("📈 Avg Market Demand", f"{avg_demand:.1f}%",
-                     "per skill")
-        
-        with col3:
-            if not role_skills_data.empty:
-                st.metric("🏆 Most Critical", role_skills_data.iloc[0]["skill"],
-                         f"{role_skills_data.iloc[0]['percentage']:.1f}%")
-        
-        with col4:
-            competitiveness = "🔥 High" if avg_demand > 20 else "📊 Medium" if avg_demand > 10 else "✅ Accessible"
-            st.metric("💪 Competition Level", competitiveness,
-                     "demand intensity")
-        
-        st.divider()
-        
-        # Skill breakdown
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.subheader(f"📋 Essential Skills for {selected_role}")
-            
-            # Priority categorization
-            role_skills_data["Priority"] = role_skills_data["percentage"].apply(
-                lambda x: "🔴 Critical" if x >= 20 else "🟡 Important" if x >= 10 else "🟢 Valuable"
-            )
-            
-            fig_role = px.bar(
-                role_skills_data,
-                x="percentage",
-                y="skill",
-                orientation='h',
-                color="Priority",
-                text="percentage",
-                color_discrete_map={
-                    "🔴 Critical": "#FF6B6B",
-                    "🟡 Important": "#FFD93D",
-                    "🟢 Valuable": "#6BCB77"
-                },
-                title=f"Skill Priority Matrix - {selected_role}"
-            )
-            fig_role.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig_role.update_layout(height=max(400, len(role_skills_data) * 35))
-            st.plotly_chart(fig_role, use_container_width=True)
-        
-        with col2:
-            st.subheader("📊 Skill Details")
-            
-            for idx, row in role_skills_data.iterrows():
-                priority = row["Priority"]
-                with st.expander(f"{priority} {row['skill']}"):
-                    st.write(f"**Market Demand:** {row['percentage']:.1f}%")
-                    st.write(f"**Jobs Requiring:** {row['job_count']:,}")
-                    
-                    if row['percentage'] >= 30:
-                        st.info("🔥 Extremely high demand - TOP priority!")
-                    elif row['percentage'] >= 15:
-                        st.warning("⚡ High demand - Important to have")
-                    else:
-                        st.success("✅ Moderate demand - Nice to have")
-        
-        st.divider()
-        
-        # Learning path recommendation
-        st.subheader("🎓 Your Personalized Learning Path")
-        
-        critical_skills = role_skills_data[role_skills_data["percentage"] >= 20]["skill"].tolist()
-        important_skills = role_skills_data[(role_skills_data["percentage"] >= 10) & 
-                                           (role_skills_data["percentage"] < 20)]["skill"].tolist()
-        valuable_skills = role_skills_data[role_skills_data["percentage"] < 10]["skill"].tolist()
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("### 🔴 Phase 1: Critical")
-            st.markdown("**Master these first**")
-            for skill in critical_skills:
-                st.markdown(f"- {skill}")
-            if not critical_skills:
-                st.info("✅ All critical skills covered!")
-        
-        with col2:
-            st.markdown("### 🟡 Phase 2: Important")
-            st.markdown("**Learn these next**")
-            for skill in important_skills:
-                st.markdown(f"- {skill}")
-            if not important_skills:
-                st.info("✅ All important skills covered!")
-        
-        with col3:
-            st.markdown("### 🟢 Phase 3: Valuable")
-            st.markdown("**Nice to have**")
-            for skill in valuable_skills:
-                st.markdown(f"- {skill}")
-            if not valuable_skills:
-                st.info("✅ All valuable skills covered!")
-        
-        # Download career report
-        st.divider()
-        career_report = role_skills_data.copy()
-        career_report["Role"] = selected_role
-        career_report = career_report[["Role", "skill", "percentage", "job_count", "Priority"]]
-        career_report.columns = ["Target Role", "Skill", "Market Demand %", "Job Count", "Priority"]
-        
-        csv = career_report.to_csv(index=False)
-        st.download_button(
-            label=f"📥 Download {selected_role} Career Report",
-            data=csv,
-            file_name=f"{selected_role.replace(' ', '_')}_skills_report.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+    return result.sort_values('job_count', ascending=False)
 
-# =============================================================================
-# VIEW MODE: DEEP DIVE
-# =============================================================================
-elif view_mode == "🔬 Deep Dive":
+@st.cache_data(ttl=300)
+def get_common_job_titles(limit=20):
+    """Get most common job titles"""
+    athena = get_athena()
     
-    st.header("🔬 Advanced Skill Analysis")
+    query = f"""
+    SELECT title, COUNT(*) as count
+    FROM jobs_with_skills
+    WHERE skill_count > 0
+    GROUP BY title
+    ORDER BY count DESC
+    LIMIT {limit}
+    """
     
-    # Skill comparison tool
-    st.subheader("⚔️ Skill Comparison Tool")
+    df = athena.run_query(query)
+    return df['title'].tolist() if not df.empty else []
+
+@st.cache_data(ttl=300)
+def get_job_titles_by_skills(selected_skills):
+    """Find jobs that match selected skills"""
+    jobs_df = get_all_jobs_with_skills()
     
-    col1, col2 = st.columns(2)
+    matching_jobs = []
     
-    with col1:
-        skill1 = st.selectbox("Select first skill", all_skills_df["skill"].tolist(), key="skill1")
-    
-    with col2:
-        skill2 = st.selectbox("Select second skill", all_skills_df["skill"].tolist(), 
-                             index=1, key="skill2")
-    
-    if skill1 and skill2:
-        data1 = all_skills_df[all_skills_df["skill"] == skill1].iloc[0]
-        data2 = all_skills_df[all_skills_df["skill"] == skill2].iloc[0]
+    for _, row in jobs_df.iterrows():
+        job_skills = parse_skills_from_string(row['skills'])
         
-        col1, col2, col3 = st.columns(3)
+        if not job_skills:
+            continue
         
-        with col1:
-            st.metric(skill1, f"{data1['percentage']:.1f}%", 
-                     f"{data1['job_count']:,} jobs")
+        matching = set(selected_skills) & set(job_skills)
+        missing = set(job_skills) - set(selected_skills)
         
-        with col2:
-            difference = data1['percentage'] - data2['percentage']
-            st.metric("Difference", f"{abs(difference):.1f}%",
-                     f"{'↑' if difference > 0 else '↓'} {skill1 if difference > 0 else skill2}")
+        match_percentage = (len(matching) / len(job_skills)) * 100 if job_skills else 0
         
-        with col3:
-            st.metric(skill2, f"{data2['percentage']:.1f}%",
-                     f"{data2['job_count']:,} jobs")
-        
-        # Visual comparison
-        comparison_df = pd.DataFrame({
-            "Skill": [skill1, skill2],
-            "Market Demand %": [data1['percentage'], data2['percentage']],
-            "Job Count": [data1['job_count'], data2['job_count']]
+        matching_jobs.append({
+            'title': row['title'],
+            'company': row['company'],
+            'total_required': len(job_skills),
+            'total_matched': len(matching),
+            'match_percentage': match_percentage,
+            'matching_skills': list(matching),
+            'missing_skills': list(missing)
         })
-        
-        fig_comp = go.Figure()
-        fig_comp.add_trace(go.Bar(
-            name='Market Demand %',
-            x=comparison_df['Skill'],
-            y=comparison_df['Market Demand %'],
-            marker_color=['#667eea', '#764ba2']
-        ))
-        fig_comp.update_layout(title="Head-to-Head Comparison", height=400)
-        st.plotly_chart(fig_comp, use_container_width=True)
     
-    st.divider()
-    
-    # Search and explore
-    st.subheader("🔍 Search & Explore")
-    
-    search_term = st.text_input("🔎 Search for skills", placeholder="e.g., Python, Excel, Communication...")
-    
-    if search_term:
-        search_results = all_skills_df[all_skills_df["skill"].str.contains(search_term, case=False)]
-        
-        if not search_results.empty:
-            st.success(f"✅ Found {len(search_results)} matching skills")
-            
-            for idx, row in search_results.iterrows():
-                col1, col2, col3 = st.columns([2, 1, 1])
-                with col1:
-                    st.write(f"**{row['skill']}**")
-                with col2:
-                    st.write(f"📊 {row['percentage']:.1f}%")
-                with col3:
-                    st.write(f"👥 {row['job_count']:,} jobs")
-        else:
-            st.warning(f"No skills found matching '{search_term}'")
-    
-    st.divider()
-    
-    # Full data table with advanced filtering
-    st.subheader("📋 Complete Skills Database")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        sort_by = st.selectbox("Sort by", ["Market Demand %", "Job Count", "Alphabetical"])
-    
-    with col2:
-        sort_order = st.radio("Order", ["Descending", "Ascending"], horizontal=True)
-    
-    with col3:
-        show_rows = st.number_input("Show rows", 10, 100, 25)
-    
-    # Apply sorting
-    display_df = all_skills_df.copy()
-    
-    if sort_by == "Market Demand %":
-        display_df = display_df.sort_values("percentage", ascending=(sort_order == "Ascending"))
-    elif sort_by == "Job Count":
-        display_df = display_df.sort_values("job_count", ascending=(sort_order == "Ascending"))
-    else:
-        display_df = display_df.sort_values("skill", ascending=(sort_order == "Ascending"))
-    
-    display_df = display_df.head(show_rows)
-    
-    # Add ranking
-    display_df["Rank"] = range(1, len(display_df) + 1)
-    display_df = display_df[["Rank", "skill", "percentage", "job_count"]]
-    display_df.columns = ["Rank", "Skill", "Market Demand %", "Job Count"]
-    
-    st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
-    
-    # Export options
-    csv = display_df.to_csv(index=False)
-    st.download_button(
-        "📥 Download Complete Dataset",
-        data=csv,
-        file_name="skills_analysis_full.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
+    return sorted(matching_jobs, key=lambda x: x['match_percentage'], reverse=True)
 
-# =============================================================================
-# VIEW MODE: TRENDS & PATTERNS
-# =============================================================================
-elif view_mode == "📈 Trends & Patterns":
+@st.cache_data(ttl=300)
+def calculate_seniority_stats():
+    """Calculate statistics by seniority level"""
+    jobs_df = get_all_jobs_with_skills()
     
-    st.header("📈 Market Trends & Pattern Analysis")
+    # Convert skill_count to numeric
+    jobs_df['skill_count'] = pd.to_numeric(jobs_df['skill_count'], errors='coerce')
     
-    # Skill demand distribution
-    st.subheader("📊 Demand Distribution Analysis")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Histogram of skill demand
-        fig_hist = px.histogram(
-            all_skills_df,
-            x="percentage",
-            nbins=20,
-            title="Distribution of Skill Demand",
-            labels={"percentage": "Market Demand %", "count": "Number of Skills"},
-            color_discrete_sequence=["#667eea"]
-        )
-        fig_hist.add_vline(x=all_skills_df["percentage"].median(), 
-                          line_dash="dash", line_color="red",
-                          annotation_text=f"Median: {all_skills_df['percentage'].median():.1f}%")
-        st.plotly_chart(fig_hist, use_container_width=True)
-    
-    with col2:
-        # Box plot by category
-        category_data = []
-        for category, skills_list in SKILL_CATEGORIES.items():
-            cat_skills = all_skills_df[all_skills_df["skill"].isin(skills_list)]
-            for _, row in cat_skills.iterrows():
-                category_data.append({
-                    "Category": category,
-                    "Demand": row["percentage"]
-                })
-        
-        if category_data:
-            cat_box_df = pd.DataFrame(category_data)
-            fig_box = px.box(
-                cat_box_df,
-                x="Category",
-                y="Demand",
-                title="Demand Variability by Category",
-                color="Category",
-                color_discrete_sequence=px.colors.qualitative.Set3
-            )
-            fig_box.update_xaxis(tickangle=-45)
-            st.plotly_chart(fig_box, use_container_width=True)
-    
-    st.divider()
-    
-    # Top vs Bottom performers
-    st.subheader("🏆 Top Performers vs 📉 Least Demanded")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 🔥 Top 10 Hottest Skills")
-        top_10 = all_skills_df.head(10)
-        
-        for idx, row in top_10.iterrows():
-            progress_val = int(row['percentage'])
-            st.markdown(f"**{idx+1}. {row['skill']}**")
-            st.progress(min(progress_val, 100))
-            st.caption(f"{row['percentage']:.1f}% | {row['job_count']:,} jobs")
-    
-    with col2:
-        st.markdown("### 🧊 Bottom 10 Niche Skills")
-        bottom_10 = all_skills_df.tail(10).sort_values("percentage", ascending=True)
-        
-        for idx, row in bottom_10.iterrows():
-            progress_val = int(row['percentage'])
-            st.markdown(f"**{row['skill']}**")
-            st.progress(max(progress_val, 5))
-            st.caption(f"{row['percentage']:.1f}% | {row['job_count']:,} jobs")
-    
-    st.divider()
-    
-    # Skill saturation analysis
-    st.subheader("🎯 Market Saturation Levels")
-    
-    # Categorize by saturation
-    saturated = all_skills_df[all_skills_df["percentage"] >= 30]
-    competitive = all_skills_df[(all_skills_df["percentage"] >= 15) & (all_skills_df["percentage"] < 30)]
-    emerging = all_skills_df[(all_skills_df["percentage"] >= 5) & (all_skills_df["percentage"] < 15)]
-    niche = all_skills_df[all_skills_df["percentage"] < 5]
-    
-    saturation_data = {
-        "🔴 Saturated (≥30%)": len(saturated),
-        "🟠 Competitive (15-30%)": len(competitive),
-        "🟡 Emerging (5-15%)": len(emerging),
-        "🟢 Niche (<5%)": len(niche)
+    seniority_map = {
+        'Junior': ['junior', 'entry', 'associate', 'jr'],
+        'Mid-Level': ['mid', 'intermediate', 'level ii', 'level 2'],
+        'Senior': ['senior', 'sr', 'lead', 'principal', 'staff'],
+        'Manager': ['manager', 'director', 'head of', 'vp', 'chief'],
+        'Other': []
     }
     
-    sat_df = pd.DataFrame(list(saturation_data.items()), columns=["Category", "Count"])
+    jobs_df['seniority'] = 'Other'
     
-    fig_sat = px.pie(
-        sat_df,
-        values="Count",
-        names="Category",
-        title="Market Saturation Distribution",
-        color_discrete_sequence=["#FF6B6B", "#FFA500", "#FFD700", "#90EE90"],
-        hole=0.4
+    for seniority, keywords in seniority_map.items():
+        for keyword in keywords:
+            mask = jobs_df['title'].str.lower().str.contains(keyword, na=False)
+            jobs_df.loc[mask, 'seniority'] = seniority
+    
+    stats = jobs_df.groupby('seniority').agg({
+        'skill_count': 'mean',
+        'id': 'count'
+    }).reset_index()
+    
+    stats.columns = ['seniority', 'avg_skills', 'job_count']
+    
+    seniority_skills = {}
+    for seniority in stats['seniority']:
+        seniority_jobs = jobs_df[jobs_df['seniority'] == seniority]
+        skill_counts = defaultdict(int)
+        
+        for _, row in seniority_jobs.iterrows():
+            skills = parse_skills_from_string(row['skills'])
+            for skill in skills:
+                skill_counts[skill] += 1
+        
+        top_skills = sorted(skill_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        seniority_skills[seniority] = [skill for skill, _ in top_skills]
+    
+    return stats, seniority_skills
+
+# ============================================================================
+# ENHANCED CHART FUNCTIONS
+# ============================================================================
+
+def create_top_skills_treemap(skills_df):
+    """Create treemap for better visualization of top skills"""
+    top_20 = skills_df.head(20).copy()
+    
+    fig = px.treemap(
+        top_20,
+        path=['skill'],
+        values='job_count',
+        color='percentage',
+        color_continuous_scale='Blues',
+        title='Top 20 Skills Market Share'
     )
-    st.plotly_chart(fig_sat, use_container_width=True)
     
+    fig.update_traces(
+        textposition="middle center",
+        textfont=dict(size=14, color='white', family='Arial, sans-serif'),
+        hovertemplate='<b>%{label}</b><br>Jobs: %{value}<br>Market Share: %{color:.1f}%<extra></extra>'
+    )
+    
+    fig.update_layout(
+        height=500,
+        margin=dict(l=10, r=10, t=40, b=10),
+        paper_bgcolor='white',
+        plot_bgcolor='white'
+    )
+    
+    return fig
+
+def create_skills_comparison_chart(skills_df):
+    """Create combined bar and line chart"""
+    top_20 = skills_df.head(20).copy()
+    
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    fig.add_trace(
+        go.Bar(
+            x=top_20['skill'],
+            y=top_20['job_count'],
+            name='Number of Jobs',
+            marker_color='#3b82f6',
+            text=top_20['job_count'],
+            textposition='outside',
+            textfont=dict(size=10)
+        ),
+        secondary_y=False
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=top_20['skill'],
+            y=top_20['percentage'],
+            name='Market Penetration (%)',
+            line=dict(color='#dc2626', width=3),
+            mode='lines+markers',
+            marker=dict(size=8)
+        ),
+        secondary_y=True
+    )
+    
+    fig.update_xaxes(title_text="Skill", tickangle=-45)
+    fig.update_yaxes(title_text="Number of Jobs", secondary_y=False)
+    fig.update_yaxes(title_text="Market Penetration (%)", secondary_y=True)
+    
+    fig.update_layout(
+        title='Top 20 Skills: Absolute Demand vs Market Penetration',
+        height=500,
+        hovermode='x unified',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        plot_bgcolor='white',
+        paper_bgcolor='white'
+    )
+    
+    return fig
+
+def create_skill_pairing_heatmap(cooccur_df):
+    """Create heatmap for skill pairings"""
+    if cooccur_df.empty or len(cooccur_df) < 5:
+        return None
+    
+    top_pairs = cooccur_df.head(25)
+    
+    # Get unique skills
+    all_skills = set()
+    for _, row in top_pairs.iterrows():
+        all_skills.add(row['skill1'])
+        all_skills.add(row['skill2'])
+    
+    skill_list = sorted(list(all_skills))
+    
+    # Create matrix
+    matrix = pd.DataFrame(0, index=skill_list, columns=skill_list)
+    
+    for _, row in top_pairs.iterrows():
+        matrix.loc[row['skill1'], row['skill2']] = row['count']
+        matrix.loc[row['skill2'], row['skill1']] = row['count']
+    
+    fig = go.Figure(data=go.Heatmap(
+        z=matrix.values,
+        x=matrix.columns,
+        y=matrix.index,
+        colorscale='Blues',
+        text=matrix.values,
+        texttemplate='%{text}',
+        textfont={"size": 10},
+        hovertemplate='%{y} + %{x}<br>Co-occurrence: %{z}<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        title='Skill Co-occurrence Heatmap',
+        height=600,
+        xaxis_title='',
+        yaxis_title='',
+        paper_bgcolor='white',
+        plot_bgcolor='white'
+    )
+    
+    fig.update_xaxes(tickangle=-45)
+    
+    return fig
+
+def create_seniority_grouped_chart(seniority_stats):
+    """Create grouped bar chart for seniority analysis"""
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        x=seniority_stats['seniority'],
+        y=seniority_stats['avg_skills'],
+        name='Avg Skills Required',
+        marker_color='#3b82f6',
+        text=seniority_stats['avg_skills'].round(1),
+        textposition='outside',
+        yaxis='y',
+        offsetgroup=0
+    ))
+    
+    fig.add_trace(go.Bar(
+        x=seniority_stats['seniority'],
+        y=seniority_stats['job_count'],
+        name='Number of Jobs',
+        marker_color='#10b981',
+        text=seniority_stats['job_count'].astype(int),
+        textposition='outside',
+        yaxis='y2',
+        offsetgroup=1
+    ))
+    
+    fig.update_layout(
+        title='Skills Requirements and Job Volume by Seniority',
+        yaxis=dict(title='Average Skills Required'),
+        yaxis2=dict(title='Number of Jobs', overlaying='y', side='right'),
+        barmode='group',
+        height=500,
+        legend=dict(x=0.01, y=0.99),
+        plot_bgcolor='white',
+        paper_bgcolor='white'
+    )
+    
+    return fig
+
+# ============================================================================
+# MAIN DASHBOARD
+# ============================================================================
+
+def main_dashboard():
+    """Main dashboard interface"""
+    
+    # Professional Header
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.markdown("# Job Skills Intelligence Platform")
+        st.markdown("**Comprehensive Job Market Analytics Dashboard**")
+    with col2:
+        if st.session_state.get('demo_mode'):
+            st.info("Demo Access")
+        else:
+            st.success(f"Logged in: {st.session_state.get('username', 'User')}")
+        
+        if st.button("Logout", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Load data
+    try:
+        stats_df, all_skills_df = load_all_data()
+        
+        total_jobs = int(stats_df["total_jobs"].iloc[0])
+        jobs_with_skills = int(stats_df["jobs_with_skills"].iloc[0])
+        avg_skills = float(stats_df["avg_skills"].iloc[0])
+        
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return
+    
+    # Professional Sidebar
+    with st.sidebar:
+        st.markdown("## Dashboard Navigation")
+        
+        view_mode = st.radio(
+            "Select Analysis View",
+            [
+                "Market Overview",
+                "Skills for Jobs",
+                "Jobs for You",
+                "Skill Pairings",
+                "Seniority Analysis",
+                "Deep Dive"
+            ],
+            label_visibility="collapsed"
+        )
+        
+        st.markdown("---")
+        
+        st.markdown("### Key Metrics")
+        st.metric("Total Jobs", f"{total_jobs:,}")
+        st.metric("Unique Skills", len(all_skills_df))
+        st.metric("Avg Skills per Job", f"{avg_skills:.1f}")
+        st.metric("Coverage Rate", f"{(jobs_with_skills/total_jobs)*100:.1f}%")
+        
+        st.markdown("---")
+        
+        st.markdown("### Data Source")
+        st.caption("Database: AWS Athena")
+        st.caption(f"Jobs Analyzed: {jobs_with_skills:,}")
+        st.caption("Update Frequency: Real-time")
+    
+    # KPI Metrics
+    st.markdown("## Executive Summary")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("🔴 Saturated", len(saturated), "High competition")
+        st.metric("Total Jobs", f"{total_jobs:,}", help="Total number of job postings analyzed")
+    
     with col2:
-        st.metric("🟠 Competitive", len(competitive), "Medium competition")
+        coverage = (jobs_with_skills / total_jobs) * 100
+        st.metric("Jobs with Skills", f"{jobs_with_skills:,}", f"{coverage:.1f}% coverage")
+    
     with col3:
-        st.metric("🟡 Emerging", len(emerging), "Growing demand")
+        st.metric("Avg Skills Required", f"{avg_skills:.1f}", help="Average skills per job posting")
+    
     with col4:
-        st.metric("🟢 Niche", len(niche), "Specialized")
+        st.metric("Unique Skills", f"{len(all_skills_df)}", help="Total distinct skills identified")
     
-    # Strategic recommendations
-    st.divider()
-    st.subheader("💡 Strategic Insights & Recommendations")
+    st.markdown("---")
     
-    insights = []
+    # =============================================================================
+    # MAIN CONTENT
+    # =============================================================================
     
-    if len(saturated) > 0:
-        insights.append(f"🔴 **High Competition Alert**: {len(saturated)} skills are saturated (>30% demand). "
-                       f"Top saturated skill: **{saturated.iloc[0]['skill']}** at {saturated.iloc[0]['percentage']:.1f}%")
+    if view_mode == "Market Overview":
+        tabs = st.tabs(["Top Skills Analysis", "Skill Demand Distribution", "Market Insights"])
+        
+        with tabs[0]:
+            st.markdown("## Top Skills in the Job Market")
+            
+            # Treemap visualization
+            st.plotly_chart(create_top_skills_treemap(all_skills_df), use_container_width=True)
+            
+            st.markdown("---")
+            
+            # Combined chart
+            st.plotly_chart(create_skills_comparison_chart(all_skills_df), use_container_width=True)
+            
+            st.markdown("---")
+            
+            # Detailed skills table
+            st.markdown("### Comprehensive Skills Ranking")
+            
+            display_df = all_skills_df.head(20).copy()
+            display_df['rank'] = range(1, len(display_df) + 1)
+            display_df = display_df[['rank', 'skill', 'job_count', 'percentage']]
+            display_df.columns = ['Rank', 'Skill', 'Job Count', 'Market Share (%)']
+            display_df['Market Share (%)'] = display_df['Market Share (%)'].round(2)
+            
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
+        
+        with tabs[1]:
+            st.markdown("## Skill Demand Distribution Analysis")
+            
+            # Categorize skills
+            high_demand = all_skills_df[all_skills_df['percentage'] >= 20].copy()
+            moderate_demand = all_skills_df[(all_skills_df['percentage'] >= 10) & (all_skills_df['percentage'] < 20)].copy()
+            emerging_skills = all_skills_df[(all_skills_df['percentage'] >= 5) & (all_skills_df['percentage'] < 10)].copy()
+            niche_skills = all_skills_df[all_skills_df['percentage'] < 5].copy()
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Distribution pie chart
+                categories = pd.DataFrame({
+                    'Category': ['High Demand (≥20%)', 'Moderate Demand (10-20%)', 'Emerging Skills (5-10%)', 'Niche Skills (<5%)'],
+                    'Count': [len(high_demand), len(moderate_demand), len(emerging_skills), len(niche_skills)]
+                })
+                
+                fig = px.pie(
+                    categories,
+                    values='Count',
+                    names='Category',
+                    title='Skills Distribution by Demand Level',
+                    color_discrete_sequence=['#dc2626', '#f59e0b', '#3b82f6', '#6366f1']
+                )
+                
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(height=400, paper_bgcolor='white')
+                
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                # Summary statistics
+                st.markdown("### Distribution Statistics")
+                
+                st.markdown("""
+                <div class='professional-card'>
+                    <h4 style='margin-top: 0;'>High Demand Skills</h4>
+                    <p style='font-size: 2em; margin: 10px 0; color: #dc2626;'>{}</p>
+                    <p style='color: #64748b;'>Market share ≥ 20%</p>
+                </div>
+                """.format(len(high_demand)), unsafe_allow_html=True)
+                
+                st.markdown("""
+                <div class='professional-card'>
+                    <h4 style='margin-top: 0;'>Moderate Demand Skills</h4>
+                    <p style='font-size: 2em; margin: 10px 0; color: #f59e0b;'>{}</p>
+                    <p style='color: #64748b;'>Market share 10-20%</p>
+                </div>
+                """.format(len(moderate_demand)), unsafe_allow_html=True)
+                
+                st.markdown("""
+                <div class='professional-card'>
+                    <h4 style='margin-top: 0;'>Emerging & Niche Skills</h4>
+                    <p style='font-size: 2em; margin: 10px 0; color: #3b82f6;'>{}</p>
+                    <p style='color: #64748b;'>Market share < 10%</p>
+                </div>
+                """.format(len(emerging_skills) + len(niche_skills)), unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Detailed breakdowns in professional format
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown("### High Demand Skills")
+                st.caption("Essential skills with highest market penetration")
+                
+                for idx, row in high_demand.head(10).iterrows():
+                    st.markdown(f"""
+                    <div class='skill-category high-demand'>
+                        <strong>{row['skill']}</strong><br>
+                        <small>{row['job_count']} jobs • {row['percentage']:.1f}% market share</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown("### Moderate Demand Skills")
+                st.caption("Important skills with growing presence")
+                
+                for idx, row in moderate_demand.head(10).iterrows():
+                    st.markdown(f"""
+                    <div class='skill-category moderate-demand'>
+                        <strong>{row['skill']}</strong><br>
+                        <small>{row['job_count']} jobs • {row['percentage']:.1f}% market share</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown("### Niche & Specialized Skills")
+                st.caption("Specialized skills for specific roles")
+                
+                for idx, row in niche_skills.head(10).iterrows():
+                    st.markdown(f"""
+                    <div class='skill-category low-demand'>
+                        <strong>{row['skill']}</strong><br>
+                        <small>{row['job_count']} jobs • {row['percentage']:.1f}% market share</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        with tabs[2]:
+            st.markdown("## Market Insights & Trends")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### Key Market Indicators")
+                
+                top_skill = all_skills_df.iloc[0]
+                market_concentration = all_skills_df.head(5)['percentage'].sum()
+                
+                st.markdown(f"""
+                <div class='insight-box'>
+                    <h4 style='margin-top: 0; color: white;'>Most In-Demand Skill</h4>
+                    <p style='font-size: 1.8em; margin: 10px 0;'>{top_skill['skill']}</p>
+                    <p>Required in {top_skill['job_count']} jobs ({top_skill['percentage']:.1f}% of market)</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"""
+                <div class='professional-card'>
+                    <h4 style='margin-top: 0;'>Market Concentration</h4>
+                    <p style='font-size: 2em; margin: 10px 0; color: #1e40af;'>{market_concentration:.1f}%</p>
+                    <p style='color: #64748b;'>Top 5 skills represent {market_concentration:.1f}% of total demand</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"""
+                <div class='professional-card'>
+                    <h4 style='margin-top: 0;'>Average Skill Requirements</h4>
+                    <p style='font-size: 2em; margin: 10px 0; color: #1e40af;'>{avg_skills:.1f}</p>
+                    <p style='color: #64748b;'>Skills per job posting on average</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown("### Market Coverage Analysis")
+                
+                # Coverage metrics
+                skills_50_plus = len(all_skills_df[all_skills_df['percentage'] >= 50])
+                skills_25_plus = len(all_skills_df[all_skills_df['percentage'] >= 25])
+                skills_10_plus = len(all_skills_df[all_skills_df['percentage'] >= 10])
+                
+                coverage_data = pd.DataFrame({
+                    'Threshold': ['≥50% Market Share', '≥25% Market Share', '≥10% Market Share'],
+                    'Skills Count': [skills_50_plus, skills_25_plus, skills_10_plus]
+                })
+                
+                fig = px.bar(
+                    coverage_data,
+                    x='Threshold',
+                    y='Skills Count',
+                    title='Skills by Market Penetration Threshold',
+                    text='Skills Count',
+                    color='Skills Count',
+                    color_continuous_scale='Blues'
+                )
+                
+                fig.update_traces(textposition='outside')
+                fig.update_layout(
+                    height=350,
+                    showlegend=False,
+                    plot_bgcolor='white',
+                    paper_bgcolor='white'
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Additional insights
+                st.markdown("### Market Observations")
+                
+                st.markdown(f"""
+                <div class='professional-card'>
+                    <strong>Critical Skills:</strong> {skills_50_plus} skills appear in 50%+ of jobs<br><br>
+                    <strong>Core Skills:</strong> {skills_25_plus} skills appear in 25%+ of jobs<br><br>
+                    <strong>Common Skills:</strong> {skills_10_plus} skills appear in 10%+ of jobs
+                </div>
+                """, unsafe_allow_html=True)
     
-    if len(emerging) > 0:
-        insights.append(f"🟡 **Opportunity Zone**: {len(emerging)} emerging skills (5-15% demand) offer good entry points. "
-                       f"Consider: **{', '.join(emerging.head(3)['skill'].tolist())}**")
+    elif view_mode == "Skills for Jobs":
+        st.markdown("## Skills Requirements by Job Title")
+        st.caption("Analyze specific skills required for different job positions")
+        
+        common_titles = get_common_job_titles()
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            search_mode = st.radio(
+                "Search Method",
+                ["Search by keyword", "Select from common titles"],
+                horizontal=True
+            )
+        
+        if search_mode == "Search by keyword":
+            job_keyword = st.text_input("Enter job title (e.g., 'Data Analyst', 'Software Engineer')")
+        else:
+            job_keyword = st.selectbox("Select a job title", common_titles)
+        
+        if job_keyword:
+            with st.spinner(f"Analyzing jobs matching '{job_keyword}'..."):
+                skills_for_job = get_skills_for_job_title(job_keyword)
+            
+            if skills_for_job is not None and not skills_for_job.empty:
+                st.success(f"Analysis complete: {len(skills_for_job)} skills identified across matching positions")
+                
+                st.markdown("---")
+                
+                # Better visualization - horizontal bar chart
+                top_skills = skills_for_job.head(20)
+                
+                fig = px.bar(
+                    top_skills,
+                    y='skill',
+                    x='percentage',
+                    orientation='h',
+                    title=f"Top 20 Skills for '{job_keyword}' Positions",
+                    labels={'percentage': 'Required in % of Jobs', 'skill': 'Skill'},
+                    color='percentage',
+                    color_continuous_scale='RdYlGn',
+                    text='percentage'
+                )
+                
+                fig.update_traces(
+                    texttemplate='%{text:.1f}%',
+                    textposition='outside',
+                    textfont=dict(size=11)
+                )
+                
+                fig.update_layout(
+                    height=600,
+                    yaxis={'categoryorder': 'total ascending'},
+                    plot_bgcolor='white',
+                    paper_bgcolor='white',
+                    xaxis_title='Percentage of Jobs Requiring Skill',
+                    yaxis_title=''
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("---")
+                
+                # Professional skills breakdown
+                st.markdown("## Skills Analysis Summary")
+                
+                critical = skills_for_job[skills_for_job['percentage'] >= 50]
+                important = skills_for_job[(skills_for_job['percentage'] >= 25) & (skills_for_job['percentage'] < 50)]
+                nice_to_have = skills_for_job[skills_for_job['percentage'] < 25]
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("### Critical Skills")
+                    st.caption("Required in ≥50% of positions")
+                    
+                    st.metric("Count", len(critical))
+                    
+                    if not critical.empty:
+                        for idx, row in critical.iterrows():
+                            st.markdown(f"""
+                            <div class='skill-category high-demand'>
+                                <strong>{row['skill']}</strong><br>
+                                <small>Required: {row['percentage']:.1f}% | Jobs: {row['job_count']}</small>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("No critical skills identified")
+                
+                with col2:
+                    st.markdown("### Important Skills")
+                    st.caption("Required in 25-50% of positions")
+                    
+                    st.metric("Count", len(important))
+                    
+                    if not important.empty:
+                        for idx, row in important.head(10).iterrows():
+                            st.markdown(f"""
+                            <div class='skill-category moderate-demand'>
+                                <strong>{row['skill']}</strong><br>
+                                <small>Required: {row['percentage']:.1f}% | Jobs: {row['job_count']}</small>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("No important skills identified")
+                
+                with col3:
+                    st.markdown("### Nice-to-Have Skills")
+                    st.caption("Required in <25% of positions")
+                    
+                    st.metric("Count", len(nice_to_have))
+                    
+                    if not nice_to_have.empty:
+                        for idx, row in nice_to_have.head(10).iterrows():
+                            st.markdown(f"""
+                            <div class='skill-category low-demand'>
+                                <strong>{row['skill']}</strong><br>
+                                <small>Required: {row['percentage']:.1f}% | Jobs: {row['job_count']}</small>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("No nice-to-have skills identified")
+                
+                st.markdown("---")
+                
+                # Complete skills table
+                st.markdown("### Complete Skills Breakdown")
+                
+                display_df = skills_for_job.copy()
+                display_df['rank'] = range(1, len(display_df) + 1)
+                display_df = display_df[['rank', 'skill', 'job_count', 'percentage']]
+                display_df.columns = ['Rank', 'Skill', 'Job Count', 'Required in % of Jobs']
+                display_df['Required in % of Jobs'] = display_df['Required in % of Jobs'].round(2)
+                
+                st.dataframe(
+                    display_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=400
+                )
+                
+            else:
+                st.warning(f"No jobs found matching '{job_keyword}'. Please try a different search term.")
+        else:
+            st.info("Please enter or select a job title to begin analysis")
     
-    if len(niche) > 0:
-        insights.append(f"🟢 **Specialization Potential**: {len(niche)} niche skills (<5% demand) for differentiation. "
-                       f"These could be competitive advantages in specific roles.")
+    elif view_mode == "Jobs for You":
+        st.markdown("## Job Matching Analysis")
+        st.caption("Find positions that match your skill profile")
+        
+        all_skills_list = all_skills_df['skill'].tolist()
+        
+        st.markdown("### Your Skills Profile")
+        selected_skills = st.multiselect(
+            "Select all skills you possess:",
+            all_skills_list,
+            help="Choose multiple skills from the list"
+        )
+        
+        if selected_skills:
+            st.success(f"Skills selected: {len(selected_skills)}")
+            
+            # Show selected skills in a nice format
+            with st.expander("View your selected skills"):
+                cols = st.columns(3)
+                for idx, skill in enumerate(selected_skills):
+                    with cols[idx % 3]:
+                        st.markdown(f"✓ {skill}")
+            
+            with st.spinner("Analyzing job matches..."):
+                matching_jobs = get_job_titles_by_skills(selected_skills)
+            
+            st.markdown("---")
+            
+            matching_jobs = [j for j in matching_jobs if j['match_percentage'] > 0]
+            
+            if matching_jobs:
+                # Summary statistics
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Total Matches", len(matching_jobs))
+                
+                with col2:
+                    excellent = len([j for j in matching_jobs if j['match_percentage'] >= 80])
+                    st.metric("Excellent Matches", excellent, help="≥80% match")
+                
+                with col3:
+                    good = len([j for j in matching_jobs if 50 <= j['match_percentage'] < 80])
+                    st.metric("Good Matches", good, help="50-80% match")
+                
+                with col4:
+                    partial = len([j for j in matching_jobs if 25 <= j['match_percentage'] < 50])
+                    st.metric("Partial Matches", partial, help="25-50% match")
+                
+                st.markdown("---")
+                
+                # Pagination for all jobs
+                st.markdown(f"## All Matching Positions ({len(matching_jobs)} jobs)")
+                
+                # Items per page
+                items_per_page = st.select_slider(
+                    "Jobs per page",
+                    options=[10, 20, 50, 100, len(matching_jobs)],
+                    value=20
+                )
+                
+                total_pages = (len(matching_jobs) - 1) // items_per_page + 1
+                
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    page = st.number_input(
+                        f"Page (1-{total_pages})",
+                        min_value=1,
+                        max_value=total_pages,
+                        value=1
+                    )
+                
+                start_idx = (page - 1) * items_per_page
+                end_idx = min(start_idx + items_per_page, len(matching_jobs))
+                
+                page_jobs = matching_jobs[start_idx:end_idx]
+                
+                st.caption(f"Showing jobs {start_idx + 1}-{end_idx} of {len(matching_jobs)}")
+                
+                for i, job in enumerate(page_jobs, start_idx + 1):
+                    match_pct = job['match_percentage']
+                    
+                    if match_pct >= 80:
+                        status = "Excellent Match"
+                        status_color = "#10b981"
+                        bg_color = "#d1fae5"
+                    elif match_pct >= 50:
+                        status = "Good Match"
+                        status_color = "#3b82f6"
+                        bg_color = "#dbeafe"
+                    elif match_pct >= 25:
+                        status = "Partial Match"
+                        status_color = "#f59e0b"
+                        bg_color = "#fef3c7"
+                    else:
+                        status = "Weak Match"
+                        status_color = "#ef4444"
+                        bg_color = "#fee2e2"
+                    
+                    with st.expander(
+                        f"#{i}. {job['title']} at {job['company']} — {match_pct:.0f}% Match ({status})",
+                        expanded=(i <= start_idx + 3)  # Expand first 3 on each page
+                    ):
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric("Match Percentage", f"{match_pct:.1f}%")
+                            st.progress(match_pct / 100)
+                        
+                        with col2:
+                            st.metric(
+                                "Your Skills Coverage",
+                                f"{job['total_matched']}/{job['total_required']}"
+                            )
+                        
+                        with col3:
+                            st.metric(
+                                "Additional Skills Needed",
+                                len(job['missing_skills'])
+                            )
+                        
+                        st.markdown("---")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("**Skills You Have (Matching):**")
+                            if job['matching_skills']:
+                                for skill in sorted(job['matching_skills']):
+                                    st.markdown(f"✓ {skill}")
+                            else:
+                                st.markdown("*None*")
+                        
+                        with col2:
+                            st.markdown("**Skills You Need:**")
+                            if job['missing_skills']:
+                                for skill in sorted(job['missing_skills'])[:15]:
+                                    st.markdown(f"• {skill}")
+                                if len(job['missing_skills']) > 15:
+                                    st.markdown(f"*...and {len(job['missing_skills']) - 15} more*")
+                            else:
+                                st.success("You have all required skills for this position!")
+            else:
+                st.warning("No matching jobs found. Try selecting different skills.")
+        else:
+            st.info("Select your skills above to find matching job opportunities")
     
-    # Soft skills dominance
-    soft_in_top10 = len(all_skills_df.head(10)[all_skills_df.head(10)["skill"].isin(
-        ["Communication", "Leadership", "Teamwork", "Sales", "Customer Service"]
-    )])
+    elif view_mode == "Skill Pairings":
+        st.markdown("## Skill Co-occurrence Analysis")
+        st.caption("Understanding which skills are commonly required together")
+        
+        with st.spinner("Analyzing skill combinations..."):
+            cooccur_df = calculate_skill_cooccurrence(min_support=5)
+        
+        if not cooccur_df.empty:
+            tabs = st.tabs(["Co-occurrence Matrix", "Top Skill Pairs", "Network Analysis"])
+            
+            with tabs[0]:
+                st.markdown("### Skill Co-occurrence Heatmap")
+                
+                fig = create_skill_pairing_heatmap(cooccur_df)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Not enough data for heatmap visualization")
+                
+                st.markdown("---")
+                
+                st.markdown("### Interpretation Guide")
+                st.markdown("""
+                <div class='professional-card'>
+                    <strong>How to read this heatmap:</strong><br><br>
+                    • Darker colors indicate stronger co-occurrence between skills<br>
+                    • Numbers show how many jobs require both skills together<br>
+                    • Diagonal cells are empty (a skill doesn't co-occur with itself)<br>
+                    • Symmetric matrix (same value appears twice for each pair)
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with tabs[1]:
+                st.markdown("### Most Common Skill Combinations")
+                
+                top_20 = cooccur_df.head(20)
+                
+                fig = px.bar(
+                    top_20,
+                    y=top_20['skill1'] + ' + ' + top_20['skill2'],
+                    x='count',
+                    orientation='h',
+                    title='Top 20 Skill Pairs by Co-occurrence',
+                    labels={'count': 'Number of Jobs', 'y': 'Skill Combination'},
+                    color='count',
+                    color_continuous_scale='Viridis',
+                    text='count'
+                )
+                
+                fig.update_traces(textposition='outside')
+                fig.update_layout(
+                    height=700,
+                    yaxis={'categoryorder': 'total ascending'},
+                    plot_bgcolor='white',
+                    paper_bgcolor='white'
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("---")
+                
+                st.markdown("### Detailed Skill Pair Analysis")
+                
+                for idx, row in cooccur_df.head(15).iterrows():
+                    with st.expander(f"{row['skill1']} + {row['skill2']} ({row['count']} jobs)"):
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric("Co-occurrence", f"{row['count']} jobs")
+                        
+                        with col2:
+                            skill1_data = all_skills_df[all_skills_df['skill'] == row['skill1']]
+                            if not skill1_data.empty:
+                                st.metric(
+                                    f"{row['skill1']}",
+                                    f"{skill1_data.iloc[0]['percentage']:.1f}%",
+                                    help=f"Appears in {row['skill1_freq']} jobs total"
+                                )
+                        
+                        with col3:
+                            skill2_data = all_skills_df[all_skills_df['skill'] == row['skill2']]
+                            if not skill2_data.empty:
+                                st.metric(
+                                    f"{row['skill2']}",
+                                    f"{skill2_data.iloc[0]['percentage']:.1f}%",
+                                    help=f"Appears in {row['skill2_freq']} jobs total"
+                                )
+                        
+                        st.markdown("---")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown(f"**{row['skill1']}** appears in **{row['skill1_freq']}** jobs total")
+                            if not skill1_data.empty:
+                                st.caption(f"Market penetration: {skill1_data.iloc[0]['percentage']:.2f}%")
+                        
+                        with col2:
+                            st.markdown(f"**{row['skill2']}** appears in **{row['skill2_freq']}** jobs total")
+                            if not skill2_data.empty:
+                                st.caption(f"Market penetration: {skill2_data.iloc[0]['percentage']:.2f}%")
+            
+            with tabs[2]:
+                st.markdown("### Skill Network Visualization")
+                
+                fig = create_skill_network_chart(cooccur_df)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("---")
+                
+                st.markdown("### Network Statistics")
+                
+                skill_connections = defaultdict(int)
+                for _, row in cooccur_df.iterrows():
+                    skill_connections[row['skill1']] += 1
+                    skill_connections[row['skill2']] += 1
+                
+                most_connected = sorted(skill_connections.items(), key=lambda x: x[1], reverse=True)[:10]
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("### Most Connected Skills")
+                    st.caption("Skills that frequently pair with others")
+                    
+                    for skill, connections in most_connected:
+                        st.markdown(f"""
+                        <div class='professional-card'>
+                            <strong>{skill}</strong><br>
+                            <small>Pairs with {connections} other skills</small>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                with col2:
+                    # Connectivity distribution
+                    connectivity_df = pd.DataFrame(most_connected, columns=['Skill', 'Connections'])
+                    
+                    fig = px.bar(
+                        connectivity_df,
+                        x='Connections',
+                        y='Skill',
+                        orientation='h',
+                        title='Top 10 Most Versatile Skills',
+                        color='Connections',
+                        color_continuous_scale='Blues'
+                    )
+                    
+                    fig.update_layout(
+                        height=400,
+                        yaxis={'categoryorder': 'total ascending'},
+                        plot_bgcolor='white',
+                        paper_bgcolor='white'
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    st.markdown(f"""
+                    <div class='insight-box'>
+                        <h4 style='margin-top: 0; color: white;'>Most Versatile Skill</h4>
+                        <p style='font-size: 1.5em; margin: 10px 0;'>{most_connected[0][0]}</p>
+                        <p>Pairs with {most_connected[0][1]} different skills</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+        else:
+            st.warning("Insufficient data for co-occurrence analysis. Try adjusting parameters.")
     
-    if soft_in_top10 >= 3:
-        insights.append(f"💼 **Soft Skills Dominance**: {soft_in_top10} of top 10 skills are soft skills. "
-                       "Interpersonal abilities are crucial across all roles.")
+    elif view_mode == "Seniority Analysis":
+        st.markdown("## Skills Requirements by Career Level")
+        st.caption("Understanding how skill requirements vary across seniority levels")
+        
+        with st.spinner("Calculating seniority statistics..."):
+            seniority_stats, seniority_skills = calculate_seniority_stats()
+        
+        # Enhanced grouped chart
+        st.plotly_chart(create_seniority_grouped_chart(seniority_stats), use_container_width=True)
+        
+        st.markdown("---")
+        
+        # Detailed seniority breakdown
+        st.markdown("## Detailed Analysis by Seniority Level")
+        
+        for _, row in seniority_stats.iterrows():
+            seniority = row['seniority']
+            avg_skills = row['avg_skills']
+            job_count = row['job_count']
+            
+            with st.expander(f"{seniority} Level — Avg {avg_skills:.1f} skills | {int(job_count)} positions"):
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Average Skills Required", f"{avg_skills:.2f}")
+                
+                with col2:
+                    st.metric("Total Positions", f"{int(job_count):,}")
+                
+                with col3:
+                    pct_of_total = (job_count / total_jobs) * 100
+                    st.metric("Market Share", f"{pct_of_total:.1f}%")
+                
+                st.markdown("---")
+                
+                st.markdown("### Most Common Skills for This Level")
+                
+                skills_list = seniority_skills.get(seniority, [])
+                if skills_list:
+                    cols = st.columns(2)
+                    for idx, skill in enumerate(skills_list):
+                        with cols[idx % 2]:
+                            st.markdown(f"• {skill}")
+                else:
+                    st.info("No specific skills data available for this level")
+        
+        st.markdown("---")
+        
+        # Summary insights
+        st.markdown("## Career Progression Insights")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            junior_avg = seniority_stats[seniority_stats['seniority'] == 'Junior']['avg_skills'].values
+            senior_avg = seniority_stats[seniority_stats['seniority'] == 'Senior']['avg_skills'].values
+            
+            if len(junior_avg) > 0 and len(senior_avg) > 0:
+                skill_increase = senior_avg[0] - junior_avg[0]
+                
+                st.markdown(f"""
+                <div class='insight-box'>
+                    <h4 style='margin-top: 0; color: white;'>Skill Development Path</h4>
+                    <p style='font-size: 1.3em; margin: 10px 0;'>+{skill_increase:.1f} skills</p>
+                    <p>Average increase from Junior to Senior level</p>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        with col2:
+            manager_jobs = seniority_stats[seniority_stats['seniority'] == 'Manager']['job_count'].values
+            if len(manager_jobs) > 0:
+                manager_pct = (manager_jobs[0] / total_jobs) * 100
+                
+                st.markdown(f"""
+                <div class='professional-card'>
+                    <h4 style='margin-top: 0;'>Management Positions</h4>
+                    <p style='font-size: 2em; margin: 10px 0; color: #1e40af;'>{manager_pct:.1f}%</p>
+                    <p style='color: #64748b;'>of total job market</p>
+                </div>
+                """, unsafe_allow_html=True)
     
-    for insight in insights:
-        st.info(insight)
+    else:  # Deep Dive
+        st.markdown("## Comprehensive Data Analysis")
+        
+        tabs = st.tabs(["Complete Skills Database", "Statistical Summary", "Data Export"])
+        
+        with tabs[0]:
+            st.markdown("### All Skills Ranked by Demand")
+            st.caption(f"Complete database of {len(all_skills_df)} unique skills identified")
+            
+            # Enhanced dataframe with better formatting
+            display_df = all_skills_df.copy()
+            display_df['rank'] = range(1, len(display_df) + 1)
+            display_df = display_df[['rank', 'skill', 'job_count', 'percentage']]
+            display_df.columns = ['Rank', 'Skill', 'Job Count', 'Market Share (%)']
+            display_df['Market Share (%)'] = display_df['Market Share (%)'].round(2)
+            
+            # Filtering options
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                min_jobs = st.number_input(
+                    "Minimum job count",
+                    min_value=0,
+                    max_value=int(display_df['Job Count'].max()),
+                    value=0
+                )
+            
+            with col2:
+                max_jobs = st.number_input(
+                    "Maximum job count",
+                    min_value=0,
+                    max_value=int(display_df['Job Count'].max()),
+                    value=int(display_df['Job Count'].max())
+                )
+            
+            with col3:
+                search_skill = st.text_input("Search for skill", "")
+            
+            # Apply filters
+            filtered_df = display_df[
+                (display_df['Job Count'] >= min_jobs) &
+                (display_df['Job Count'] <= max_jobs)
+            ]
+            
+            if search_skill:
+                filtered_df = filtered_df[
+                    filtered_df['Skill'].str.contains(search_skill, case=False, na=False)
+                ]
+            
+            st.dataframe(
+                filtered_df,
+                use_container_width=True,
+                hide_index=True,
+                height=600
+            )
+            
+            st.caption(f"Showing {len(filtered_df)} of {len(display_df)} total skills")
+        
+        with tabs[1]:
+            st.markdown("### Statistical Overview")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown("#### Demand Statistics")
+                st.markdown(f"""
+                <div class='professional-card'>
+                    <strong>Mean Job Count:</strong> {all_skills_df['job_count'].mean():.1f}<br><br>
+                    <strong>Median Job Count:</strong> {all_skills_df['job_count'].median():.1f}<br><br>
+                    <strong>Std Deviation:</strong> {all_skills_df['job_count'].std():.1f}
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown("#### Market Penetration")
+                st.markdown(f"""
+                <div class='professional-card'>
+                    <strong>Mean Share:</strong> {all_skills_df['percentage'].mean():.2f}%<br><br>
+                    <strong>Median Share:</strong> {all_skills_df['percentage'].median():.2f}%<br><br>
+                    <strong>Max Share:</strong> {all_skills_df['percentage'].max():.2f}%
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown("#### Distribution")
+                quartiles = all_skills_df['job_count'].quantile([0.25, 0.5, 0.75])
+                st.markdown(f"""
+                <div class='professional-card'>
+                    <strong>Q1 (25th percentile):</strong> {quartiles[0.25]:.0f}<br><br>
+                    <strong>Q2 (50th percentile):</strong> {quartiles[0.5]:.0f}<br><br>
+                    <strong>Q3 (75th percentile):</strong> {quartiles[0.75]:.0f}
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Distribution histogram
+            fig = px.histogram(
+                all_skills_df,
+                x='job_count',
+                nbins=50,
+                title='Distribution of Job Counts Across Skills',
+                labels={'job_count': 'Number of Jobs Requiring Skill', 'count': 'Number of Skills'},
+                color_discrete_sequence=['#3b82f6']
+            )
+            
+            fig.update_layout(
+                height=400,
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                bargap=0.1
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with tabs[2]:
+            st.markdown("### Export Data")
+            st.caption("Download complete datasets for further analysis")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.download_button(
+                    label="Download Skills Data (CSV)",
+                    data=all_skills_df.to_csv(index=False).encode('utf-8'),
+                    file_name='job_skills_complete_data.csv',
+                    mime='text/csv',
+                    use_container_width=True
+                )
+            
+            with col2:
+                st.download_button(
+                    label="Download Summary Stats (CSV)",
+                    data=stats_df.to_csv(index=False).encode('utf-8'),
+                    file_name='job_market_summary_stats.csv',
+                    mime='text/csv',
+                    use_container_width=True
+                )
+            
+            with col3:
+                # Export co-occurrence data
+                cooccur_export = calculate_skill_cooccurrence(min_support=3)
+                st.download_button(
+                    label="Download Skill Pairs (CSV)",
+                    data=cooccur_export.to_csv(index=False).encode('utf-8'),
+                    file_name='skill_cooccurrence_data.csv',
+                    mime='text/csv',
+                    use_container_width=True
+                )
+            
+            st.markdown("---")
+            
+            st.markdown("#### Export Information")
+            st.markdown("""
+            <div class='professional-card'>
+                <strong>Data Formats:</strong><br>
+                • CSV files compatible with Excel, Python, R, and other analytics tools<br>
+                • UTF-8 encoding for international character support<br>
+                • Column headers included for easy data import<br><br>
+                
+                <strong>Usage Recommendations:</strong><br>
+                • Use skills data for trend analysis and forecasting<br>
+                • Use summary stats for reporting and presentations<br>
+                • Use skill pairs for network analysis and correlation studies
+            </div>
+            """, unsafe_allow_html=True)
 
-# Footer
-st.divider()
-col1, col2, col3 = st.columns(3)
+# ============================================================================
+# HELPER FUNCTION FOR NETWORK CHART (same as before)
+# ============================================================================
 
-with col1:
-    st.caption("🗄️ Data Source: AWS Athena")
-with col2:
-    st.caption("☁️ Powered by: S3 + Lambda + SNS")
-with col3:
-    st.caption("⚡ Real-time: Sub-2s query response")
-
-
-# Add Skills Gap Analysis
-def show_skills_gap():
-    st.markdown("### 🎯 Skills Gap Analysis")
-    col1, col2 = st.columns(2)
+def create_skill_network_chart(cooccur_df):
+    """Create network visualization"""
+    if cooccur_df.empty or len(cooccur_df) < 3:
+        return None
     
-    with col1:
-        st.markdown("**📚 Traditional Skills (Declining)**")
-        traditional = ["Java", "C++", "SQL"]
-        for skill in traditional:
-            st.write(f"- {skill}: Taught everywhere, needed less")
+    top_pairs = cooccur_df.head(20)
     
-    with col2:
-        st.markdown("**🚀 In-Demand Skills (Growing)**")
-        modern = ["Python", "Docker", "AWS", "React"]
-        for skill in modern:
-            st.write(f"- {skill}: High demand, rarely taught")
+    nodes = set()
+    for _, row in top_pairs.iterrows():
+        nodes.add(row['skill1'])
+        nodes.add(row['skill2'])
     
-    st.warning("**Gap Identified**: Cloud and DevOps skills missing from curriculum")
-
-# Call this function in your main display section
-show_skills_gap()
-
-# Key Insights Section
-st.markdown("---")
-st.markdown("### 💡 Key Insights")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Skills Coverage", "84.8%", "+12%")
-with col2:
-    st.metric("Cloud Skills Gap", "40%", "⚠️ Critical")
-with col3:
-    st.metric("Avg Skills/Job", "2.5", "+0.3")
-
-# Recommendations
-st.markdown("---")
-st.info("""
-**🎓 Recommendations for Universities:**
-1. Add AWS/Cloud Computing course immediately
-2. Update programming curriculum to include Docker/Kubernetes
-3. Partner with industry for real-world projects
-""")
-
-# Data Export
-if st.button("📥 Download Skills Data as CSV"):
-    csv = skills_df.to_csv(index=False)
-    st.download_button(
-        label="Download CSV",
-        data=csv,
-        file_name="skills_analysis.csv",
-        mime="text/csv"
+    node_list = list(nodes)
+    node_indices = {node: i for i, node in enumerate(node_list)}
+    
+    edge_x = []
+    edge_y = []
+    
+    np.random.seed(42)
+    angles = np.linspace(0, 2*np.pi, len(node_list), endpoint=False)
+    node_x = np.cos(angles)
+    node_y = np.sin(angles)
+    
+    for _, row in top_pairs.iterrows():
+        x0, y0 = node_x[node_indices[row['skill1']]], node_y[node_indices[row['skill1']]]
+        x1, y1 = node_x[node_indices[row['skill2']]], node_y[node_indices[row['skill2']]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+    
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=0.5, color='#cbd5e1'),
+        hoverinfo='none',
+        mode='lines'
     )
+    
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text',
+        hoverinfo='text',
+        text=node_list,
+        textposition="top center",
+        textfont=dict(size=11, family='Arial, sans-serif'),
+        marker=dict(
+            size=20,
+            color='#3b82f6',
+            line=dict(width=2, color='white')
+        )
+    )
+    
+    fig = go.Figure(data=[edge_trace, node_trace])
+    fig.update_layout(
+        title='Skill Connectivity Network',
+        showlegend=False,
+        hovermode='closest',
+        margin=dict(b=0, l=0, r=0, t=40),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        height=600,
+        plot_bgcolor='white',
+        paper_bgcolor='white'
+    )
+    
+    return fig
+
+# ============================================================================
+# MAIN APP
+# ============================================================================
+
+def main():
+    """Main application entry point"""
+    
+    if not check_authentication():
+        login_page()
+    else:
+        main_dashboard()
+
+if __name__ == "__main__":
+    main()

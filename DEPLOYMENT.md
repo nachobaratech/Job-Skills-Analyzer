@@ -121,7 +121,7 @@ Expected behavior - FastAPI docs may not work with Mangum adapter. API endpoints
 ```bash
 # Upload data manually
 aws s3 cp skills-data/kaggle-1k-expanded.jsonl \
-    s3://job-skills-raw-223280412524/processed/
+    s3://job-skills-raw-624943535027/processed/
 
 # Check Lambda logs
 aws logs tail /aws/lambda/JobSkillsETLTrigger --follow

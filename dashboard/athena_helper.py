@@ -6,7 +6,7 @@ class AthenaHelper:
     def __init__(self):
         self.client = boto3.client('athena', region_name='us-east-1')
         self.database = 'job_skills_db'
-        self.output_location = 's3://job-skills-athena-results-223280412524/'
+        self.output_location = 's3://job-skills-athena-results-624943535027/'
     
     def run_query(self, query):
         """Execute Athena query and return results as DataFrame"""

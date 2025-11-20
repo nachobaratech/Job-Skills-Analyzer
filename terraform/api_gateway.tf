@@ -5,7 +5,7 @@
 resource "aws_lambda_function" "api" {
   filename         = "${path.module}/../api/api-lambda.zip"
   function_name    = "JobSkillsAPI"
-  role            = "arn:aws:iam::223280412524:role/LabRole"
+  role            = "arn:aws:iam::624943535027:role/LabRole"
   handler         = "lambda_handler.handler"
   source_code_hash = filebase64sha256("${path.module}/../api/api-lambda.zip")
   runtime         = "python3.13"
