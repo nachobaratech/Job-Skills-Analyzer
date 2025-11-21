@@ -50,3 +50,4 @@ test-event.json
 backup-before-migration.tar.gz
 *.tar.gz
 *.zip
+*.pdf

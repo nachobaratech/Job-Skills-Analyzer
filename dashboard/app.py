@@ -563,7 +563,7 @@ def create_top_skills_treemap(skills_df):
     
     fig.update_traces(
         textposition="middle center",
-        textfont=dict(size=14, color='white', family='Arial, sans-serif'),
+        textfont=dict(size=14, color='black', family='Arial, sans-serif'),
         hovertemplate='<b>%{label}</b><br>Jobs: %{value}<br>Market Share: %{color:.1f}%<extra></extra>'
     )
     
@@ -806,7 +806,7 @@ def main_dashboard():
     # =============================================================================
     
     if view_mode == "Market Overview":
-        tabs = st.tabs(["Top Skills Analysis", "Skill Demand Distribution", "Market Insights"])
+        tabs = st.tabs(["Top Skills Analysis", "Skill Demand Distribution"])
         
         with tabs[0]:
             st.markdown("## Top Skills in the Job Market")
@@ -937,84 +937,7 @@ def main_dashboard():
                     </div>
                     """, unsafe_allow_html=True)
         
-        with tabs[2]:
-            st.markdown("## Market Insights & Trends")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### Key Market Indicators")
-                
-                top_skill = all_skills_df.iloc[0]
-                market_concentration = all_skills_df.head(5)['percentage'].sum()
-                
-                st.markdown(f"""
-                <div class='insight-box'>
-                    <h4 style='margin-top: 0; color: white;'>Most In-Demand Skill</h4>
-                    <p style='font-size: 1.8em; margin: 10px 0;'>{top_skill['skill']}</p>
-                    <p>Required in {top_skill['job_count']} jobs ({top_skill['percentage']:.1f}% of market)</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown(f"""
-                <div class='professional-card'>
-                    <h4 style='margin-top: 0;'>Market Concentration</h4>
-                    <p style='font-size: 2em; margin: 10px 0; color: #1e40af;'>{market_concentration:.1f}%</p>
-                    <p style='color: #64748b;'>Top 5 skills represent {market_concentration:.1f}% of total demand</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown(f"""
-                <div class='professional-card'>
-                    <h4 style='margin-top: 0;'>Average Skill Requirements</h4>
-                    <p style='font-size: 2em; margin: 10px 0; color: #1e40af;'>{avg_skills:.1f}</p>
-                    <p style='color: #64748b;'>Skills per job posting on average</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown("### Market Coverage Analysis")
-                
-                # Coverage metrics
-                skills_50_plus = len(all_skills_df[all_skills_df['percentage'] >= 50])
-                skills_25_plus = len(all_skills_df[all_skills_df['percentage'] >= 25])
-                skills_10_plus = len(all_skills_df[all_skills_df['percentage'] >= 10])
-                
-                coverage_data = pd.DataFrame({
-                    'Threshold': ['≥50% Market Share', '≥25% Market Share', '≥10% Market Share'],
-                    'Skills Count': [skills_50_plus, skills_25_plus, skills_10_plus]
-                })
-                
-                fig = px.bar(
-                    coverage_data,
-                    x='Threshold',
-                    y='Skills Count',
-                    title='Skills by Market Penetration Threshold',
-                    text='Skills Count',
-                    color='Skills Count',
-                    color_continuous_scale='Blues'
-                )
-                
-                fig.update_traces(textposition='outside')
-                fig.update_layout(
-                    height=350,
-                    showlegend=False,
-                    plot_bgcolor='white',
-                    paper_bgcolor='white'
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Additional insights
-                st.markdown("### Market Observations")
-                
-                st.markdown(f"""
-                <div class='professional-card'>
-                    <strong>Critical Skills:</strong> {skills_50_plus} skills appear in 50%+ of jobs<br><br>
-                    <strong>Core Skills:</strong> {skills_25_plus} skills appear in 25%+ of jobs<br><br>
-                    <strong>Common Skills:</strong> {skills_10_plus} skills appear in 10%+ of jobs
-                </div>
-                """, unsafe_allow_html=True)
+
     
     elif view_mode == "Skills for Jobs":
         st.markdown("## Skills Requirements by Job Title")
