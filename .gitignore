@@ -47,3 +47,6 @@ test-event.json
 
 # Data (optional - you can include or exclude)
 # skills-data/*.jsonl
+backup-before-migration.tar.gz
+*.tar.gz
+*.zip
