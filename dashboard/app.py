@@ -59,6 +59,75 @@ class CognitoAuth:
             return None, str(e)
         except Exception as e:
             return None, f"Unexpected error: {str(e)}"
+    
+    def sign_up(self, email, password):
+        """Sign up a new user with Cognito using email as username"""
+        if not self.client:
+            return None, "Cognito client not initialized"
+        
+        try:
+            response = self.client.sign_up(
+                ClientId=self.client_id,
+                Username=email,  # Use email as username
+                Password=password,
+                UserAttributes=[
+                    {'Name': 'email', 'Value': email}
+                ]
+            )
+            return response, None
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'UsernameExistsException':
+                return None, "This email is already registered. Please sign in."
+            elif error_code == 'InvalidPasswordException':
+                return None, "Password does not meet requirements. Must be at least 8 characters with uppercase, lowercase, number, and special character."
+            elif error_code == 'InvalidParameterException':
+                return None, "Invalid email format. Please enter a valid email address."
+            else:
+                return None, str(e)
+        except Exception as e:
+            return None, f"Unexpected error: {str(e)}"
+    
+    def confirm_signup(self, username, confirmation_code):
+        """Confirm user signup with verification code"""
+        if not self.client:
+            return None, "Cognito client not initialized"
+        
+        try:
+            response = self.client.confirm_sign_up(
+                ClientId=self.client_id,
+                Username=username,
+                ConfirmationCode=confirmation_code
+            )
+            return response, None
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'CodeMismatchException':
+                return None, "Invalid verification code. Please check the code and try again."
+            elif error_code == 'ExpiredCodeException':
+                return None, "Verification code has expired. Please request a new code."
+            elif error_code == 'NotAuthorizedException':
+                return None, "User is already confirmed."
+            else:
+                return None, str(e)
+        except Exception as e:
+            return None, f"Unexpected error: {str(e)}"
+    
+    def resend_confirmation_code(self, username):
+        """Resend confirmation code to user"""
+        if not self.client:
+            return None, "Cognito client not initialized"
+        
+        try:
+            response = self.client.resend_confirmation_code(
+                ClientId=self.client_id,
+                Username=username
+            )
+            return response, None
+        except ClientError as e:
+            return None, str(e)
+        except Exception as e:
+            return None, f"Unexpected error: {str(e)}"
 
 if 'cognito_auth' not in st.session_state:
     st.session_state.cognito_auth = CognitoAuth()
@@ -126,6 +195,170 @@ def login_page():
                     st.session_state.authenticated = True
                     st.session_state.username = "demo_user"
                     st.session_state.demo_mode = True
+                    st.rerun()
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Link to sign up
+            col_center = st.columns([1, 1, 1])[1]
+            with col_center:
+                if st.button("Don't have an account? Sign Up", use_container_width=True, type="secondary"):
+                    st.session_state.show_signup = True
+                    st.rerun()
+
+def signup_page():
+    """Display professional sign up page"""
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div style='text-align: center; padding: 40px;'>
+            <h1 style='color: #1e3a8a; font-size: 2.5em; margin-bottom: 10px; font-weight: 600;'>Create Your Account</h1>
+            <p style='color: #64748b; font-size: 1.1em; font-weight: 400;'>Join the Job Skills Intelligence Platform</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        with st.container():
+            st.markdown("### Sign Up")
+            
+            email = st.text_input(
+                "Email Address", 
+                placeholder="your.email@example.com",
+                key="signup_email",
+                help="Your email will be used as your username to sign in"
+            )
+            
+            password = st.text_input(
+                "Password", 
+                type="password",
+                placeholder="Create a strong password",
+                key="signup_password",
+                help="Must be at least 8 characters with uppercase, lowercase, number, and special character"
+            )
+            
+            confirm_password = st.text_input(
+                "Confirm Password", 
+                type="password",
+                placeholder="Re-enter your password",
+                key="signup_confirm_password"
+            )
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            col_a, col_b = st.columns(2)
+            
+            with col_a:
+                if st.button("Create Account", use_container_width=True, type="primary"):
+                    if email and password and confirm_password:
+                        if password != confirm_password:
+                            st.error("Passwords do not match!")
+                        elif len(password) < 8:
+                            st.error("Password must be at least 8 characters long!")
+                        else:
+                            with st.spinner("Creating your account..."):
+                                result, error = st.session_state.cognito_auth.sign_up(email, password)
+                                
+                                if result:
+                                    st.success("Account created successfully! Please check your email for a 6-digit verification code.")
+                                    # Store email for verification step
+                                    st.session_state.verification_email = email
+                                    st.session_state.show_verification = True
+                                    st.session_state.show_signup = False
+                                    import time
+                                    time.sleep(2)
+                                    st.rerun()
+                                else:
+                                    st.error(f"Sign up failed: {error}")
+                    else:
+                        st.warning("Please fill in all fields")
+            
+            with col_b:
+                if st.button("Back to Login", use_container_width=True):
+                    st.session_state.show_signup = False
+                    st.rerun()
+
+def verification_page():
+    """Display email verification page"""
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div style='text-align: center; padding: 40px;'>
+            <h1 style='color: #1e3a8a; font-size: 2.5em; margin-bottom: 10px; font-weight: 600;'>Verify Your Email</h1>
+            <p style='color: #64748b; font-size: 1.1em; font-weight: 400;'>Enter the 6-digit code sent to your email</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        with st.container():
+            # Show the email address being verified
+            verification_email = st.session_state.get('verification_email', '')
+            st.info(f"Verification code sent to: **{verification_email}**")
+            
+            st.markdown("### Enter Verification Code")
+            
+            # 6-digit code input
+            verification_code = st.text_input(
+                "6-Digit Code",
+                placeholder="976899",
+                max_chars=6,
+                key="verification_code",
+                help="Check your email inbox for the verification code"
+            )
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            col_a, col_b = st.columns(2)
+            
+            with col_a:
+                if st.button("Verify", use_container_width=True, type="primary"):
+                    if verification_code and len(verification_code) == 6:
+                        with st.spinner("Verifying your account..."):
+                            result, error = st.session_state.cognito_auth.confirm_signup(
+                                verification_email, 
+                                verification_code
+                            )
+                            
+                            if result:
+                                st.success("Email verified successfully! You can now sign in.")
+                                # Clear verification state
+                                st.session_state.show_verification = False
+                                st.session_state.verification_email = None
+                                import time
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.error(f"Verification failed: {error}")
+                    else:
+                        st.warning("Please enter a 6-digit verification code")
+            
+            with col_b:
+                if st.button("Resend Code", use_container_width=True):
+                    with st.spinner("Resending verification code..."):
+                        result, error = st.session_state.cognito_auth.resend_confirmation_code(verification_email)
+                        
+                        if result:
+                            st.success("Verification code resent! Check your email.")
+                        else:
+                            st.error(f"Failed to resend code: {error}")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Link back to login
+            col_center = st.columns([1, 1, 1])[1]
+            with col_center:
+                if st.button("Back to Login", use_container_width=True, type="secondary"):
+                    st.session_state.show_verification = False
+                    st.session_state.show_signup = False
                     st.rerun()
 
 # ============================================================================
@@ -864,7 +1097,7 @@ def main_dashboard():
                 )
                 
                 fig.update_traces(textposition='inside', textinfo='percent+label')
-                fig.update_layout(height=400, paper_bgcolor='white')
+                fig.update_layout(height=600, paper_bgcolor='white')
                 
                 st.plotly_chart(fig, use_container_width=True)
             
@@ -898,20 +1131,32 @@ def main_dashboard():
             
             st.markdown("---")
             
-            # Detailed breakdowns in professional format
+            # Detailed breakdowns in professional format - REORDERED
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.markdown("### High Demand Skills")
-                st.caption("Essential skills with highest market penetration")
+                st.markdown("### Niche & Specialized Skills")
+                st.caption("Specialized skills for specific roles")
                 
-                for idx, row in high_demand.head(10).iterrows():
+                # Show first 10 niche skills
+                for idx, row in niche_skills.head(10).iterrows():
                     st.markdown(f"""
-                    <div class='skill-category high-demand'>
+                    <div class='skill-category low-demand'>
                         <strong>{row['skill']}</strong><br>
                         <small>{row['job_count']} jobs • {row['percentage']:.1f}% market share</small>
                     </div>
                     """, unsafe_allow_html=True)
+                
+                # Add expander for remaining niche skills
+                if len(niche_skills) > 10:
+                    with st.expander(f"➕ Show {len(niche_skills) - 10} more niche skills"):
+                        for idx, row in niche_skills.iloc[10:].iterrows():
+                            st.markdown(f"""
+                            <div class='skill-category low-demand'>
+                                <strong>{row['skill']}</strong><br>
+                                <small>{row['job_count']} jobs • {row['percentage']:.1f}% market share</small>
+                            </div>
+                            """, unsafe_allow_html=True)
             
             with col2:
                 st.markdown("### Moderate Demand Skills")
@@ -926,12 +1171,12 @@ def main_dashboard():
                     """, unsafe_allow_html=True)
             
             with col3:
-                st.markdown("### Niche & Specialized Skills")
-                st.caption("Specialized skills for specific roles")
+                st.markdown("### High Demand Skills")
+                st.caption("Essential skills with highest market penetration")
                 
-                for idx, row in niche_skills.head(10).iterrows():
+                for idx, row in high_demand.head(10).iterrows():
                     st.markdown(f"""
-                    <div class='skill-category low-demand'>
+                    <div class='skill-category high-demand'>
                         <strong>{row['skill']}</strong><br>
                         <small>{row['job_count']} jobs • {row['percentage']:.1f}% market share</small>
                     </div>
@@ -971,12 +1216,15 @@ def main_dashboard():
                 # Better visualization - horizontal bar chart
                 top_skills = skills_for_job.head(20)
                 
+                # Dynamic title with actual number of skills
+                num_skills_shown = len(top_skills)
+                
                 fig = px.bar(
                     top_skills,
                     y='skill',
                     x='percentage',
                     orientation='h',
-                    title=f"Top 20 Skills for '{job_keyword}' Positions",
+                    title=f"Top {num_skills_shown} Skills for '{job_keyword}' Positions",
                     labels={'percentage': 'Required in % of Jobs', 'skill': 'Skill'},
                     color='percentage',
                     color_continuous_scale='RdYlGn',
@@ -1485,7 +1733,7 @@ def main_dashboard():
     else:  # Deep Dive
         st.markdown("## Comprehensive Data Analysis")
         
-        tabs = st.tabs(["Complete Skills Database", "Statistical Summary", "Data Export"])
+        tabs = st.tabs(["Complete Skills Database", "Data Export"])
         
         with tabs[0]:
             st.markdown("### All Skills Ranked by Demand")
@@ -1541,63 +1789,6 @@ def main_dashboard():
             st.caption(f"Showing {len(filtered_df)} of {len(display_df)} total skills")
         
         with tabs[1]:
-            st.markdown("### Statistical Overview")
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("#### Demand Statistics")
-                st.markdown(f"""
-                <div class='professional-card'>
-                    <strong>Mean Job Count:</strong> {all_skills_df['job_count'].mean():.1f}<br><br>
-                    <strong>Median Job Count:</strong> {all_skills_df['job_count'].median():.1f}<br><br>
-                    <strong>Std Deviation:</strong> {all_skills_df['job_count'].std():.1f}
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown("#### Market Penetration")
-                st.markdown(f"""
-                <div class='professional-card'>
-                    <strong>Mean Share:</strong> {all_skills_df['percentage'].mean():.2f}%<br><br>
-                    <strong>Median Share:</strong> {all_skills_df['percentage'].median():.2f}%<br><br>
-                    <strong>Max Share:</strong> {all_skills_df['percentage'].max():.2f}%
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col3:
-                st.markdown("#### Distribution")
-                quartiles = all_skills_df['job_count'].quantile([0.25, 0.5, 0.75])
-                st.markdown(f"""
-                <div class='professional-card'>
-                    <strong>Q1 (25th percentile):</strong> {quartiles[0.25]:.0f}<br><br>
-                    <strong>Q2 (50th percentile):</strong> {quartiles[0.5]:.0f}<br><br>
-                    <strong>Q3 (75th percentile):</strong> {quartiles[0.75]:.0f}
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Distribution histogram
-            fig = px.histogram(
-                all_skills_df,
-                x='job_count',
-                nbins=50,
-                title='Distribution of Job Counts Across Skills',
-                labels={'job_count': 'Number of Jobs Requiring Skill', 'count': 'Number of Skills'},
-                color_discrete_sequence=['#3b82f6']
-            )
-            
-            fig.update_layout(
-                height=400,
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                bargap=0.1
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with tabs[2]:
             st.markdown("### Export Data")
             st.caption("Download complete datasets for further analysis")
             
@@ -1726,7 +1917,14 @@ def main():
     """Main application entry point"""
     
     if not check_authentication():
-        login_page()
+        # Check if user needs to verify email
+        if st.session_state.get('show_verification', False):
+            verification_page()
+        # Check if user wants to see signup page
+        elif st.session_state.get('show_signup', False):
+            signup_page()
+        else:
+            login_page()
     else:
         main_dashboard()
 
